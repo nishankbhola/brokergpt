@@ -27,7 +27,8 @@ def ingest_company_pdfs(company_name: str):
     vectordb = Chroma.from_documents(
         documents=all_chunks,
         embedding=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2"),
-        persist_directory=vectorstore_path
+        #persist_directory=vectorstore_path
+        persist_directory=None
     )
     vectordb.persist()
     print(f"Ingested {len(all_chunks)} document chunks into vectorstore for {company_name}.")
