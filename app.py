@@ -10,6 +10,10 @@ from dotenv import load_dotenv
 from langchain.vectorstores import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 
+# Detect if running on Streamlit Cloud
+def is_streamlit_cloud():
+    return os.environ.get("HOME") == "/home/adminuser"
+
 load_dotenv()
 
 st.set_page_config(page_title="🤖 Broker-gpt", layout="wide")
@@ -20,11 +24,9 @@ st.sidebar.header("🏢 Manage Companies")
 company_base_dir = "data/pdfs"
 os.makedirs(company_base_dir, exist_ok=True)
 
-# Initialize session state for company refresh
 if "company_added" not in st.session_state:
     st.session_state["company_added"] = False
 
-# Add new company
 new_company = st.sidebar.text_input("➕ Create new company folder", key="new_company")
 if st.sidebar.button("Add Company"):
     new_path = os.path.join(company_base_dir, new_company)
@@ -35,16 +37,13 @@ if st.sidebar.button("Add Company"):
     else:
         st.sidebar.warning("⚠️ Folder exists or name is empty")
 
-# Refresh company list
 company_folders = [f for f in os.listdir(company_base_dir) if os.path.isdir(os.path.join(company_base_dir, f))]
 if not company_folders:
     st.warning("⚠️ No companies found. Add one to begin.")
     st.stop()
 
-# Select company
 selected_company = st.sidebar.radio("📂 Select company", company_folders, key="selected_company")
 
-# Upload PDF
 uploaded_pdf = st.sidebar.file_uploader("📄 Upload PDF to selected company", type="pdf", key="uploader")
 if uploaded_pdf:
     save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
@@ -52,11 +51,8 @@ if uploaded_pdf:
         f.write(uploaded_pdf.getbuffer())
     st.sidebar.success(f"✅ Uploaded: {uploaded_pdf.name}")
 
-# Vectorstore path in local or Streamlit Cloud mode
-if os.getenv("IS_STREAMLIT_CLOUD") == "true":
-    VECTORSTORE_ROOT = "/mount/tmp/vectorstores"
-else:
-    VECTORSTORE_ROOT = "vectorstores"
+# Path handling
+VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
 vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
 
 # Relearn PDFs
@@ -66,7 +62,7 @@ if st.sidebar.button("🔄 Relearn PDFs"):
     ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
     st.sidebar.success("✅ Re-ingested knowledge for " + selected_company)
 
-# === Navigation Buttons ===
+# View Mode
 st.sidebar.markdown("---")
 view_mode = st.sidebar.radio("📌 View Mode", ["🔍 Ask Questions", "📊 Dashboard"])
 
@@ -77,19 +73,16 @@ else:
     if view_mode == "📊 Dashboard":
         st.subheader("📊 Company Dashboard")
 
-        # Count uploaded PDFs
         company_pdf_dir = os.path.join(company_base_dir, selected_company)
         uploaded_pdfs = [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
         pdf_count = len(uploaded_pdfs)
-
-        # Vector DB stats
         db_exists = os.path.exists(vectorstore_path)
+
         st.markdown(f"- **Company**: `{selected_company}`")
         st.markdown(f"- **PDFs uploaded**: `{pdf_count}`")
         st.markdown(f"- **Vectorstore exists**: `{'Yes ✅' if db_exists else 'No ❌'}`")
 
         if db_exists:
-            # Show vectorstore file size
             total_size = sum(
                 os.path.getsize(os.path.join(dp, f))
                 for dp, dn, filenames in os.walk(vectorstore_path)
