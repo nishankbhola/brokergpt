@@ -11,9 +11,7 @@ from langchain.vectorstores import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 
 
-from ingest import ingest_company_pdfs
-shutil.rmtree(vectorstore_path, ignore_errors=True)
-ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
+
 
 
 # Detect if running on Streamlit Cloud
