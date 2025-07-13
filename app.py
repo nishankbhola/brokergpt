@@ -9,7 +9,8 @@ import streamlit as st
 from dotenv import load_dotenv
 from langchain.vectorstores import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
-import pysqlite3 as sqlite3
+
+load_dotenv()
 
 st.set_page_config(page_title="🤖 Broker-gpt", layout="wide")
 
