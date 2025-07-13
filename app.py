@@ -195,41 +195,41 @@ os.makedirs(logos_dir, exist_ok=True)
 
 # Sidebar for company management
 with st.sidebar:
-    st.header("🏢 Company Management")
+    # st.header("🏢 Company Management")
     
-    # Admin section
-    st.markdown("### 🔧 Admin Controls")
-    if st.button("🔐 Admin Access"):
-        st.session_state.admin_authenticated = False
+    # # Admin section
+    # st.markdown("### 🔧 Admin Controls")
+    # if st.button("🔐 Admin Access"):
+    #     st.session_state.admin_authenticated = False
     
-    if check_admin_password():
-        st.markdown('<div class="success-zone">', unsafe_allow_html=True)
-        st.success("🔓 Admin Mode Active")
+    # if check_admin_password():
+    #     st.markdown('<div class="success-zone">', unsafe_allow_html=True)
+    #     st.success("🔓 Admin Mode Active")
         
-        # Add new company
-        st.markdown("#### ➕ Add New Company")
-        with st.form("add_company_form"):
-            new_company = st.text_input("Company Name:")
-            logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
-            add_submitted = st.form_submit_button("Add Company")
+    #     # Add new company
+    #     st.markdown("#### ➕ Add New Company")
+    #     with st.form("add_company_form"):
+    #         new_company = st.text_input("Company Name:")
+    #         logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
+    #         add_submitted = st.form_submit_button("Add Company")
             
-            if add_submitted and new_company:
-                new_path = os.path.join(company_base_dir, new_company)
-                if not os.path.exists(new_path):
-                    os.makedirs(new_path)
+    #         if add_submitted and new_company:
+    #             new_path = os.path.join(company_base_dir, new_company)
+    #             if not os.path.exists(new_path):
+    #                 os.makedirs(new_path)
                     
-                    # Save logo if uploaded
-                    if logo_file is not None:
-                        logo_path = os.path.join(logos_dir, f"{new_company}.png")
-                        with open(logo_path, "wb") as f:
-                            f.write(logo_file.getbuffer())
+    #                 # Save logo if uploaded
+    #                 if logo_file is not None:
+    #                     logo_path = os.path.join(logos_dir, f"{new_company}.png")
+    #                     with open(logo_path, "wb") as f:
+    #                         f.write(logo_file.getbuffer())
                     
-                    st.success(f"✅ Added company: {new_company}")
-                    st.rerun()
-                else:
-                    st.warning("⚠️ Company already exists")
+    #                 st.success(f"✅ Added company: {new_company}")
+    #                 st.rerun()
+    #             else:
+    #                 st.warning("⚠️ Company already exists")
         
-        st.markdown('</div>', unsafe_allow_html=True)
+    #     st.markdown('</div>', unsafe_allow_html=True)
     
     # Company selection
     st.markdown("---")
