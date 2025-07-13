@@ -106,7 +106,7 @@ st.markdown("""
         color: white;
         padding: 0.1rem;
         border-radius: 1px;
-        margin-bottom: 1rem;
+        margin-bottom: 0.1rem;
         text-align: center;
     }
     .company-card {
@@ -159,7 +159,7 @@ st.markdown("""
 # Header
 st.markdown("""
 <div class="main-header">
-    <h3>🤖 Broker-GPT </h3>
+    <h4>🤖 Broker-GPT </h4>
 </div>
 """, unsafe_allow_html=True)
 
@@ -385,7 +385,7 @@ if st.session_state.selected_company:
         
         else:  # Ask Questions view
             st.markdown("---")
-            display_company_with_logo(selected_company, size=70)
+            display_company_with_logo(selected_company, size=100)
             st.subheader(f"💬 Ask {selected_company} Questions") 
             
             query = st.text_input("🔍 Enter your question:", placeholder="What are the coverage details for...")
@@ -449,7 +449,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                         st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
                         if 'vectorstore' in st.session_state:
                             del st.session_state['vectorstore']
-
+    st.markdown("---")
     col1, col2 = st.columns(2)
     
     with col1:
