@@ -260,15 +260,15 @@ with st.sidebar:
                 st.image(logo, width=30)
     
     if st.session_state.selected_company:
-        st.markdown("---")
-        st.markdown("### 📄 Upload PDFs")
+        # st.markdown("---")
+        # st.markdown("### 📄 Upload PDFs")
         
-        selected_company = st.session_state.selected_company
-        uploaded_pdf = st.file_uploader(
-            f"Upload PDF to {selected_company}:", 
-            type="pdf", 
-            key="pdf_uploader"
-        )
+        # selected_company = st.session_state.selected_company
+        # uploaded_pdf = st.file_uploader(
+        #     f"Upload PDF to {selected_company}:", 
+        #     type="pdf", 
+        #     key="pdf_uploader"
+        # )
         
         if uploaded_pdf:
             save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
