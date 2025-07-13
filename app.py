@@ -327,17 +327,11 @@ if st.session_state.selected_company:
     
     # Navigation tabs
     #st.markdown('<div class="nav-tabs">', unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
+
     
-    with col1:
-        if st.button("🔍 Ask Questions", key="nav_questions"):
-            st.session_state.current_view = "Ask Questions"
     
-    with col2:
-        if st.button("📊 Dashboard", key="nav_dashboard"):
-            st.session_state.current_view = "Dashboard"
+
     
-    st.markdown('</div>', unsafe_allow_html=True)
     
     # Path handling
     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
@@ -456,6 +450,17 @@ Please provide a clear, professional response that would be helpful for insuranc
                         if 'vectorstore' in st.session_state:
                             del st.session_state['vectorstore']
 
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔍 Ask Questions", key="nav_questions"):
+            st.session_state.current_view = "Ask Questions"
+    
+    with col2:
+        if st.button("📊 Dashboard", key="nav_dashboard"):
+            st.session_state.current_view = "Dashboard"
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("👆 Please select a company from the sidebar to continue.")
 
@@ -463,7 +468,7 @@ else:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT Enterprise | Powered by AI | Version 2.0"
+    "🤖 Broker-GPT | Powered by AI | Version 6.0.1 | 2025"
     "</div>", 
     unsafe_allow_html=True
 )
