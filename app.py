@@ -16,12 +16,14 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 def is_streamlit_cloud():
     return os.environ.get("HOME") == "/home/adminuser"
 
-def create_chroma_vectorstore(vectorstore_path, max_retries=3):
-    """Create Chroma vectorstore with retry logic"""
+def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=3):
+    """Create Chroma vectorstore with retry logic and company-specific caching"""
     for attempt in range(max_retries):
         try:
-            if hasattr(st.session_state, 'chroma_client'):
-                del st.session_state.chroma_client
+            # Clear any existing chroma client for this company
+            vectorstore_key = f'vectorstore_{company_name}'
+            if vectorstore_key in st.session_state:
+                del st.session_state[vectorstore_key]
             
             os.makedirs(vectorstore_path, exist_ok=True)
             
@@ -87,6 +89,22 @@ def check_admin_password():
                     return False
         return False
     return True
+
+def clear_company_vectorstore_cache(company_name):
+    """Clear vectorstore cache for a specific company"""
+    vectorstore_key = f'vectorstore_{company_name}'
+    if vectorstore_key in st.session_state:
+        del st.session_state[vectorstore_key]
+
+def get_company_vectorstore(company_name, vectorstore_path):
+    """Get or create company-specific vectorstore with proper caching"""
+    vectorstore_key = f'vectorstore_{company_name}'
+    
+    # Check if we have a cached vectorstore for this specific company
+    if vectorstore_key not in st.session_state:
+        st.session_state[vectorstore_key] = create_chroma_vectorstore(vectorstore_path, company_name)
+    
+    return st.session_state[vectorstore_key]
 
 # Load environment variables
 load_dotenv()
@@ -229,6 +247,10 @@ with st.sidebar:
         col1, col2 = st.columns([3, 1])
         with col1:
             if st.button(f"📂 {company}", key=f"select_{company}"):
+                # Clear vectorstore cache when switching companies
+                if st.session_state.selected_company and st.session_state.selected_company != company:
+                    clear_company_vectorstore_cache(st.session_state.selected_company)
+                
                 st.session_state.selected_company = company
                 st.rerun()
         
@@ -276,8 +298,8 @@ with st.sidebar:
                     
                     ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
                     
-                    if 'vectorstore' in st.session_state:
-                        del st.session_state['vectorstore']
+                    # Clear the cached vectorstore for this company
+                    clear_company_vectorstore_cache(selected_company)
                     
                     st.success("✅ Knowledge base updated!")
                     st.rerun()
@@ -292,6 +314,9 @@ with st.sidebar:
             if st.button("🗑️ Delete All Company Data", type="secondary"):
                 if st.button("⚠️ CONFIRM DELETE", key="confirm_delete"):
                     try:
+                        # Clear vectorstore cache first
+                        clear_company_vectorstore_cache(selected_company)
+                        
                         # Delete PDFs
                         company_path = os.path.join(company_base_dir, selected_company)
                         if os.path.exists(company_path):
@@ -381,10 +406,9 @@ if st.session_state.selected_company:
             if query:
                 with st.spinner("🤖 Broker-GPT is analyzing your question..."):
                     try:
-                        if 'vectorstore' not in st.session_state:
-                            st.session_state['vectorstore'] = create_chroma_vectorstore(vectorstore_path)
+                        # Get company-specific vectorstore
+                        vectorstore = get_company_vectorstore(selected_company, vectorstore_path)
                         
-                        vectorstore = st.session_state['vectorstore']
                         retriever = vectorstore.as_retriever()
                         docs = retriever.get_relevant_documents(query)
                         context = "\n\n".join([doc.page_content for doc in docs])
@@ -395,13 +419,13 @@ if st.session_state.selected_company:
                         payload = {
                             "contents": [{
                                 "parts": [{
-                                    "text": f"""As a professional insurance broker assistant, answer the following question using the context provided.
+                                    "text": f"""As a professional insurance broker assistant, answer the following question using ONLY the context provided for {selected_company}.
 
 Question: {query}
 
-Context: {context}
+Context from {selected_company}: {context}
 
-Please provide a clear, professional response that would be helpful for insurance brokers and their clients.
+Please provide a clear, professional response that would be helpful for insurance brokers and their clients. Base your answer ONLY on the provided context from {selected_company}.
 """
                                 }]
                             }]
@@ -415,6 +439,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                             try:
                                 answer = response.json()['candidates'][0]['content']['parts'][0]['text']
                                 st.markdown("### 🤖 Broker-GPT Response")
+                                st.markdown(f"**Company:** {selected_company}")
                                 st.markdown(f"**Question:** {query}")
                                 st.markdown("**Answer:**")
                                 st.success(answer)
@@ -435,8 +460,8 @@ Please provide a clear, professional response that would be helpful for insuranc
                     except Exception as e:
                         st.error(f"❌ Error accessing knowledge base: {str(e)}")
                         st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                        if 'vectorstore' in st.session_state:
-                            del st.session_state['vectorstore']
+                        # Clear the cached vectorstore for this company
+                        clear_company_vectorstore_cache(selected_company)
     st.markdown("---")
     col1, col2 = st.columns(2)
     
@@ -456,7 +481,7 @@ else:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 6.0.1 | 2025"
+    "🤖 Broker-GPT | Powered by AI | Version 6.0.2 | 2025"
     "</div>", 
     unsafe_allow_html=True
 )
