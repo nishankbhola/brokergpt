@@ -486,7 +486,7 @@ else:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 6.0.2 | 2025"
+    "🤖 Broker-GPT | Powered by AI | Version 7.0.5 | 2025"
     "</div>", 
     unsafe_allow_html=True
 )
