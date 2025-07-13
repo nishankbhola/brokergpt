@@ -1,3 +1,6 @@
+import pysqlite3 as sqlite3
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import os
 import shutil
 import json
@@ -7,9 +10,6 @@ from dotenv import load_dotenv
 from langchain.vectorstores import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 import pysqlite3 as sqlite3
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-load_dotenv()
 
 st.set_page_config(page_title="🤖 Broker-gpt", layout="wide")
 
