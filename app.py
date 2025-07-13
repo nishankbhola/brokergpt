@@ -61,8 +61,8 @@ def display_company_with_logo(company_name, size=50):
         col1, col2 = st.columns([1, 4])
         with col1:
             st.image(logo, width=size)
-        with col2:
-            st.markdown(f"**{company_name}**")
+        #with col2:
+            #st.markdown(f"**{company_name}**")
     else:
         st.markdown(f"🏢 **{company_name}**")
 
@@ -93,7 +93,7 @@ load_dotenv()
 
 # Page configuration
 st.set_page_config(
-    page_title="🤖 Broker-GPT Enterprise",
+    page_title="🤖 Broker-GPT",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -102,11 +102,11 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        background: linear-gradient(90deg, #1e3c72, #2a5298);
+        /*background: linear-gradient(90deg, #1e3c72, #2a5298);*/
         color: white;
-        padding: 1rem;
-        border-radius: 10px;
-        margin-bottom: 2rem;
+        padding: 0.1rem;
+        border-radius: 1px;
+        margin-bottom: 1rem;
         text-align: center;
     }
     .company-card {
