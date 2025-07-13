@@ -52,15 +52,18 @@ if uploaded_pdf:
         f.write(uploaded_pdf.getbuffer())
     st.sidebar.success(f"✅ Uploaded: {uploaded_pdf.name}")
 
+# Vectorstore path in writable directory
+VECTORSTORE_ROOT = "/mount/tmp/vectorstores"
+vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+
 # Relearn PDFs
 if st.sidebar.button("🔄 Relearn PDFs"):
     from ingest import ingest_company_pdfs
-    shutil.rmtree(os.path.join(st.runtime.get_instance().runtime.media_mgr.media_dir, "vectorstores", selected_company), ignore_errors=True)
-    ingest_company_pdfs(selected_company)
+    shutil.rmtree(vectorstore_path, ignore_errors=True)
+    ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
     st.sidebar.success("✅ Re-ingested knowledge for " + selected_company)
 
 # === Main Area ===
-vectorstore_path = os.path.join(st.runtime.get_instance().runtime.media_mgr.media_dir, "vectorstores", selected_company)
 if not os.path.exists(vectorstore_path):
     st.info(f"Upload PDFs for **{selected_company}** and click 'Relearn PDFs' to start.")
 else:
@@ -108,4 +111,3 @@ Context: {context}
         else:
             st.error(f"❌ Gemini API Error: {response.status_code}")
             st.json(response.json())
-
