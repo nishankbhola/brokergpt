@@ -7,7 +7,26 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 
 from langchain.embeddings import SentenceTransformerEmbeddings
+ # --- NEW CODE START ---
+    # Ensure the base 'vectorstores' directory exists and has correct permissions
+    base_vectorstores_dir = "vectorstores"
+    if not os.path.exists(base_vectorstores_dir):
+        os.makedirs(base_vectorstores_dir, exist_ok=True)
+        # Set permissions to rwx for owner, group, and others
+        # This is 0o777 (octal), allowing full access
+        os.chmod(base_vectorstores_dir, 0o777)
+    else:
+        # If it exists, ensure its permissions are correct
+        os.chmod(base_vectorstores_dir, 0o777)
 
+    # Ensure the specific company's vectorstore directory also exists and has correct permissions
+    if not os.path.exists(vectorstore_path):
+        os.makedirs(vectorstore_path, exist_ok=True)
+        os.chmod(vectorstore_path, 0o777)
+    else:
+        # If it exists, ensure its permissions are correct
+        os.chmod(vectorstore_path, 0o777)
+    # --- NEW CODE END ---
 def ingest_company_pdfs(company_name: str):
     pdf_folder = os.path.join("data/pdfs", company_name)
     vectorstore_path = os.path.join("vectorstores", company_name)
