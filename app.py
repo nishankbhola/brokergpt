@@ -320,19 +320,7 @@ with st.sidebar:
 # Main content area
 if st.session_state.selected_company:
     selected_company = st.session_state.selected_company
-    
-    # Display selected company with logo
-    #st.markdown("### Currently Selected:")
-    #display_company_with_logo(selected_company, size=70)
-    
-    # Navigation tabs
-    #st.markdown('<div class="nav-tabs">', unsafe_allow_html=True)
 
-    
-    
-
-    
-    
     # Path handling
     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
     vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
@@ -388,7 +376,7 @@ if st.session_state.selected_company:
             display_company_with_logo(selected_company, size=100)
             st.subheader(f"💬 Ask {selected_company} Questions") 
             
-            query = st.text_input("🔍 Enter your question:", placeholder="What are the coverage details for...")
+            query = st.text_input("🔍 Enter your question:", placeholder="Ask me anything about underwriting...")
             
             if query:
                 with st.spinner("🤖 Broker-GPT is analyzing your question..."):
