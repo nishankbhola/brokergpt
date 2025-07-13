@@ -2,11 +2,9 @@ import os
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
-import pysqlite3 as sqlite3
+
 from langchain.embeddings import SentenceTransformerEmbeddings
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 def ingest_company_pdfs(company_name: str):
     pdf_folder = os.path.join("data/pdfs", company_name)
     vectorstore_path = os.path.join("vectorstores", company_name)
@@ -27,8 +25,8 @@ def ingest_company_pdfs(company_name: str):
     vectordb = Chroma.from_documents(
         documents=all_chunks,
         embedding=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2"),
-        #persist_directory=vectorstore_path
-        persist_directory=None
+        persist_directory=vectorstore_path
+        #persist_directory=None
     )
     vectordb.persist()
     print(f"Ingested {len(all_chunks)} document chunks into vectorstore for {company_name}.")
