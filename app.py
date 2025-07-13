@@ -7,6 +7,7 @@ import json
 import requests
 import streamlit as st
 import time
+from PIL import Image
 from dotenv import load_dotenv
 from langchain.vectorstores import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
@@ -19,29 +20,23 @@ def create_chroma_vectorstore(vectorstore_path, max_retries=3):
     """Create Chroma vectorstore with retry logic"""
     for attempt in range(max_retries):
         try:
-            # Clear any existing client settings
             if hasattr(st.session_state, 'chroma_client'):
                 del st.session_state.chroma_client
             
-            # Ensure directory exists
             os.makedirs(vectorstore_path, exist_ok=True)
             
-            # Create vectorstore with explicit client settings
             vectorstore = Chroma(
                 persist_directory=vectorstore_path,
                 embedding_function=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2"),
-                client_settings=None  # Use default client settings
+                client_settings=None
             )
             
-            # Test the connection
             vectorstore._client.heartbeat()
             return vectorstore
             
         except Exception as e:
-            st.error(f"Attempt {attempt + 1} failed: {str(e)}")
             if attempt < max_retries - 1:
-                time.sleep(2)  # Wait before retry
-                # Clean up any partial database files
+                time.sleep(2)
                 if os.path.exists(vectorstore_path):
                     for file in os.listdir(vectorstore_path):
                         if file.endswith('.sqlite3') or file.endswith('.db'):
@@ -52,155 +47,423 @@ def create_chroma_vectorstore(vectorstore_path, max_retries=3):
             else:
                 raise e
 
+def get_company_logo(company_name):
+    """Get company logo if it exists"""
+    logo_path = os.path.join("data/logos", f"{company_name}.png")
+    if os.path.exists(logo_path):
+        return Image.open(logo_path)
+    return None
+
+def display_company_with_logo(company_name, size=50):
+    """Display company name with logo if available"""
+    logo = get_company_logo(company_name)
+    if logo:
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.image(logo, width=size)
+        with col2:
+            st.markdown(f"**{company_name}**")
+    else:
+        st.markdown(f"🏢 **{company_name}**")
+
+def check_admin_password():
+    """Check if admin password is correct"""
+    if 'admin_authenticated' not in st.session_state:
+        st.session_state.admin_authenticated = False
+    
+    if not st.session_state.admin_authenticated:
+        with st.form("admin_login"):
+            st.subheader("🔐 Admin Access Required")
+            password = st.text_input("Enter admin password:", type="password")
+            submitted = st.form_submit_button("Login")
+            
+            if submitted:
+                if password == "classmate":
+                    st.session_state.admin_authenticated = True
+                    st.success("✅ Admin access granted!")
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid password")
+                    return False
+        return False
+    return True
+
+# Load environment variables
 load_dotenv()
 
-st.set_page_config(page_title="🤖 Broker-gpt", layout="wide")
-st.title("🤝 Broker-gpt: Insurance Broker Assistant")
+# Page configuration
+st.set_page_config(
+    page_title="🤖 Broker-GPT Enterprise",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# === Sidebar UI ===
-st.sidebar.header("🏢 Manage Companies")
+# Custom CSS for professional styling
+st.markdown("""
+<style>
+    .main-header {
+        background: linear-gradient(90deg, #1e3c72, #2a5298);
+        color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    .company-card {
+        background: white;
+        border: 2px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        transition: all 0.3s ease;
+    }
+    .company-card:hover {
+        border-color: #2a5298;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .selected-company {
+        border-color: #2a5298;
+        background: #f0f4ff;
+    }
+    .nav-tabs {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .metric-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.5rem;
+        text-align: center;
+    }
+    .danger-zone {
+        background: #fff5f5;
+        border: 2px solid #feb2b2;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+    .success-zone {
+        background: #f0fff4;
+        border: 2px solid #9ae6b4;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Header
+st.markdown("""
+<div class="main-header">
+    <h1>🤖 Broker-GPT Enterprise</h1>
+    <p>Advanced Insurance Broker Assistant Platform</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Initialize session state
+if 'selected_company' not in st.session_state:
+    st.session_state.selected_company = None
+if 'current_view' not in st.session_state:
+    st.session_state.current_view = "Ask Questions"
+
+# Create necessary directories
 company_base_dir = "data/pdfs"
+logos_dir = "data/logos"
 os.makedirs(company_base_dir, exist_ok=True)
+os.makedirs(logos_dir, exist_ok=True)
 
-if "company_added" not in st.session_state:
-    st.session_state["company_added"] = False
-
-new_company = st.sidebar.text_input("➕ Create new company folder", key="new_company")
-if st.sidebar.button("Add Company"):
-    new_path = os.path.join(company_base_dir, new_company)
-    if new_company and not os.path.exists(new_path):
-        os.makedirs(new_path)
-        st.sidebar.success(f"✅ Added company: {new_company}")
-        st.session_state["company_added"] = True
-    else:
-        st.sidebar.warning("⚠️ Folder exists or name is empty")
-
-company_folders = [f for f in os.listdir(company_base_dir) if os.path.isdir(os.path.join(company_base_dir, f))]
-if not company_folders:
-    st.warning("⚠️ No companies found. Add one to begin.")
-    st.stop()
-
-selected_company = st.sidebar.radio("📂 Select company", company_folders, key="selected_company")
-
-uploaded_pdf = st.sidebar.file_uploader("📄 Upload PDF to selected company", type="pdf", key="uploader")
-if uploaded_pdf:
-    save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
-    with open(save_path, "wb") as f:
-        f.write(uploaded_pdf.getbuffer())
-    st.sidebar.success(f"✅ Uploaded: {uploaded_pdf.name}")
-
-# Path handling
-VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
-
-# Relearn PDFs
-if st.sidebar.button("🔄 Relearn PDFs"):
-    try:
-        from ingest import ingest_company_pdfs
+# Sidebar for company management
+with st.sidebar:
+    st.header("🏢 Company Management")
+    
+    # Admin section
+    st.markdown("### 🔧 Admin Controls")
+    if st.button("🔐 Admin Access"):
+        st.session_state.admin_authenticated = False
+    
+    if check_admin_password():
+        st.markdown('<div class="success-zone">', unsafe_allow_html=True)
+        st.success("🔓 Admin Mode Active")
         
-        # Clean up old vectorstore completely
-        if os.path.exists(vectorstore_path):
-            shutil.rmtree(vectorstore_path, ignore_errors=True)
-        
-        # Small delay to ensure cleanup
-        time.sleep(1)
-        
-        # Recreate directory
-        os.makedirs(vectorstore_path, exist_ok=True)
-        
-        # Ingest PDFs
-        ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
-        
-        # Clear any cached vectorstore
-        if 'vectorstore' in st.session_state:
-            del st.session_state['vectorstore']
+        # Add new company
+        st.markdown("#### ➕ Add New Company")
+        with st.form("add_company_form"):
+            new_company = st.text_input("Company Name:")
+            logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
+            add_submitted = st.form_submit_button("Add Company")
             
-        st.sidebar.success("✅ Re-ingested knowledge for " + selected_company)
-        st.rerun()
-        
-    except Exception as e:
-        st.sidebar.error(f"❌ Error during relearning: {str(e)}")
-
-# View Mode
-st.sidebar.markdown("---")
-view_mode = st.sidebar.radio("📌 View Mode", ["🔍 Ask Questions", "📊 Dashboard"])
-
-# === Main Area ===
-if not os.path.exists(vectorstore_path):
-    st.info(f"Upload PDFs for **{selected_company}** and click 'Relearn PDFs' to start.")
-else:
-    if view_mode == "📊 Dashboard":
-        st.subheader("📊 Company Dashboard")
-
-        company_pdf_dir = os.path.join(company_base_dir, selected_company)
-        uploaded_pdfs = [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
-        pdf_count = len(uploaded_pdfs)
-        db_exists = os.path.exists(vectorstore_path)
-
-        st.markdown(f"- **Company**: `{selected_company}`")
-        st.markdown(f"- **PDFs uploaded**: `{pdf_count}`")
-        st.markdown(f"- **Vectorstore exists**: `{'Yes ✅' if db_exists else 'No ❌'}`")
-
-        if db_exists:
-            total_size = sum(
-                os.path.getsize(os.path.join(dp, f))
-                for dp, dn, filenames in os.walk(vectorstore_path)
-                for f in filenames
-            )
-            size_mb = round(total_size / 1024 / 1024, 2)
-            st.markdown(f"- **Vectorstore size**: `{size_mb} MB`")
-
-    else:
-        st.markdown("---")
-        st.subheader(f"💬 Ask {selected_company} anything about their policies")
-        query = st.text_input("Type your question:")
-
-        if query:
-            with st.spinner("🔍 Please wait while Broker-gpt searches and thinks..."):
-                try:
-                    # Use cached vectorstore if available
-                    if 'vectorstore' not in st.session_state:
-                        st.session_state['vectorstore'] = create_chroma_vectorstore(vectorstore_path)
+            if add_submitted and new_company:
+                new_path = os.path.join(company_base_dir, new_company)
+                if not os.path.exists(new_path):
+                    os.makedirs(new_path)
                     
-                    vectorstore = st.session_state['vectorstore']
-                    retriever = vectorstore.as_retriever()
-                    docs = retriever.get_relevant_documents(query)
-                    context = "\n\n".join([doc.page_content for doc in docs])
+                    # Save logo if uploaded
+                    if logo_file is not None:
+                        logo_path = os.path.join(logos_dir, f"{new_company}.png")
+                        with open(logo_path, "wb") as f:
+                            f.write(logo_file.getbuffer())
+                    
+                    st.success(f"✅ Added company: {new_company}")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Company already exists")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Company selection
+    st.markdown("---")
+    st.markdown("### 📁 Select Company")
+    
+    company_folders = [f for f in os.listdir(company_base_dir) 
+                      if os.path.isdir(os.path.join(company_base_dir, f))]
+    
+    if not company_folders:
+        st.warning("⚠️ No companies found. Add one to begin.")
+        st.stop()
+    
+    # Display companies with logos
+    for company in company_folders:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if st.button(f"📂 {company}", key=f"select_{company}"):
+                st.session_state.selected_company = company
+                st.rerun()
+        
+        with col2:
+            logo = get_company_logo(company)
+            if logo:
+                st.image(logo, width=30)
+    
+    if st.session_state.selected_company:
+        st.markdown("---")
+        st.markdown("### 📄 Upload PDFs")
+        
+        selected_company = st.session_state.selected_company
+        uploaded_pdf = st.file_uploader(
+            f"Upload PDF to {selected_company}:", 
+            type="pdf", 
+            key="pdf_uploader"
+        )
+        
+        if uploaded_pdf:
+            save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
+            with open(save_path, "wb") as f:
+                f.write(uploaded_pdf.getbuffer())
+            st.success(f"✅ Uploaded: {uploaded_pdf.name}")
+            st.rerun()
+        
+        # Admin controls for selected company
+        if st.session_state.get('admin_authenticated', False):
+            st.markdown("---")
+            st.markdown("### ⚙️ Admin Actions")
+            
+            # Relearn PDFs
+            if st.button("🔄 Relearn PDFs"):
+                try:
+                    from ingest import ingest_company_pdfs
+                    
+                    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+                    vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+                    
+                    if os.path.exists(vectorstore_path):
+                        shutil.rmtree(vectorstore_path, ignore_errors=True)
+                    
+                    time.sleep(1)
+                    os.makedirs(vectorstore_path, exist_ok=True)
+                    
+                    ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
+                    
+                    if 'vectorstore' in st.session_state:
+                        del st.session_state['vectorstore']
+                    
+                    st.success("✅ Knowledge base updated!")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+            
+            # Delete company data
+            st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
+            st.markdown("#### 🗑️ Danger Zone")
+            
+            if st.button("🗑️ Delete All Company Data", type="secondary"):
+                if st.button("⚠️ CONFIRM DELETE", key="confirm_delete"):
+                    try:
+                        # Delete PDFs
+                        company_path = os.path.join(company_base_dir, selected_company)
+                        if os.path.exists(company_path):
+                            shutil.rmtree(company_path)
+                        
+                        # Delete vectorstore
+                        VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+                        vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+                        if os.path.exists(vectorstore_path):
+                            shutil.rmtree(vectorstore_path)
+                        
+                        # Delete logo
+                        logo_path = os.path.join(logos_dir, f"{selected_company}.png")
+                        if os.path.exists(logo_path):
+                            os.remove(logo_path)
+                        
+                        st.success(f"✅ Deleted all data for {selected_company}")
+                        st.session_state.selected_company = None
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error deleting: {str(e)}")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+# Main content area
+if st.session_state.selected_company:
+    selected_company = st.session_state.selected_company
+    
+    # Display selected company with logo
+    st.markdown("### Currently Selected:")
+    display_company_with_logo(selected_company, size=60)
+    
+    # Navigation tabs
+    st.markdown('<div class="nav-tabs">', unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔍 Ask Questions", key="nav_questions"):
+            st.session_state.current_view = "Ask Questions"
+    
+    with col2:
+        if st.button("📊 Dashboard", key="nav_dashboard"):
+            st.session_state.current_view = "Dashboard"
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Path handling
+    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+    vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+    
+    if not os.path.exists(vectorstore_path):
+        st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.")
+    else:
+        if st.session_state.current_view == "Dashboard":
+            st.markdown("---")
+            st.subheader("📊 Company Dashboard")
+            
+            # Metrics
+            col1, col2, col3 = st.columns(3)
+            
+            company_pdf_dir = os.path.join(company_base_dir, selected_company)
+            uploaded_pdfs = []
+            if os.path.exists(company_pdf_dir):
+                uploaded_pdfs = [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
+            
+            pdf_count = len(uploaded_pdfs)
+            db_exists = os.path.exists(vectorstore_path)
+            
+            with col1:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric("📄 PDF Files", pdf_count)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                st.metric("💾 Knowledge Base", "Ready" if db_exists else "Not Ready")
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col3:
+                if db_exists:
+                    total_size = sum(
+                        os.path.getsize(os.path.join(dp, f))
+                        for dp, dn, filenames in os.walk(vectorstore_path)
+                        for f in filenames
+                    )
+                    size_mb = round(total_size / 1024 / 1024, 2)
+                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+                    st.metric("💽 DB Size", f"{size_mb} MB")
+                    st.markdown('</div>', unsafe_allow_html=True)
+            
+            # PDF List
+            if uploaded_pdfs:
+                st.markdown("#### 📄 Uploaded Documents")
+                for pdf in uploaded_pdfs:
+                    st.markdown(f"• {pdf}")
+        
+        else:  # Ask Questions view
+            st.markdown("---")
+            st.subheader(f"💬 Ask {selected_company} Questions")
+            
+            query = st.text_input("🔍 Enter your question:", placeholder="What are the coverage details for...")
+            
+            if query:
+                with st.spinner("🤖 Broker-GPT is analyzing your question..."):
+                    try:
+                        if 'vectorstore' not in st.session_state:
+                            st.session_state['vectorstore'] = create_chroma_vectorstore(vectorstore_path)
+                        
+                        vectorstore = st.session_state['vectorstore']
+                        retriever = vectorstore.as_retriever()
+                        docs = retriever.get_relevant_documents(query)
+                        context = "\n\n".join([doc.page_content for doc in docs])
 
-                    payload = {
-                        "contents": [{
-                            "parts": [{
-                                "text": f"""Answer the following question using the context below.
+                        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+
+                        payload = {
+                            "contents": [{
+                                "parts": [{
+                                    "text": f"""As a professional insurance broker assistant, answer the following question using the context provided.
 
 Question: {query}
 
 Context: {context}
+
+Please provide a clear, professional response that would be helpful for insurance brokers and their clients.
 """
+                                }]
                             }]
-                        }]
-                    }
+                        }
 
-                    headers = {"Content-Type": "application/json"}
-                    response = requests.post(url, headers=headers, data=json.dumps(payload))
+                        headers = {"Content-Type": "application/json"}
+                        response = requests.post(url, headers=headers, data=json.dumps(payload))
 
-                    st.markdown("---")
-                    st.markdown("### 🤖 Broker-gpt's Answer")
-                    if response.status_code == 200:
-                        try:
-                            answer = response.json()['candidates'][0]['content']['parts'][0]['text']
-                            st.success(answer)
-                        except:
-                            st.error("❌ Gemini replied but parsing failed.")
-                    else:
-                        st.error(f"❌ Gemini API Error: {response.status_code}")
-                        st.json(response.json())
-                        
-                except Exception as e:
-                    st.error(f"❌ Error accessing vectorstore: {str(e)}")
-                    st.info("Try clicking 'Relearn PDFs' to rebuild the knowledge base.")
-                    # Clear cached vectorstore on error
-                    if 'vectorstore' in st.session_state:
-                        del st.session_state['vectorstore']
+                        st.markdown("---")
+                        if response.status_code == 200:
+                            try:
+                                answer = response.json()['candidates'][0]['content']['parts'][0]['text']
+                                st.markdown("### 🤖 Broker-GPT Response")
+                                st.markdown(f"**Question:** {query}")
+                                st.markdown("**Answer:**")
+                                st.success(answer)
+                                
+                                # Show source documents
+                                if docs:
+                                    with st.expander("📚 Source Documents"):
+                                        for i, doc in enumerate(docs[:3]):  # Show top 3 sources
+                                            st.markdown(f"**Source {i+1}:**")
+                                            st.text(doc.page_content[:500] + "...")
+                                            st.markdown("---")
+                                            
+                            except Exception as e:
+                                st.error("❌ Error parsing response from Gemini")
+                        else:
+                            st.error(f"❌ Gemini API Error: {response.status_code}")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error accessing knowledge base: {str(e)}")
+                        st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
+                        if 'vectorstore' in st.session_state:
+                            del st.session_state['vectorstore']
+
+else:
+    st.info("👆 Please select a company from the sidebar to continue.")
+
+# Footer
+st.markdown("---")
+st.markdown(
+    "<div style='text-align: center; color: gray;'>"
+    "🤖 Broker-GPT Enterprise | Powered by AI | Version 2.0"
+    "</div>", 
+    unsafe_allow_html=True
+)
