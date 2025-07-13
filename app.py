@@ -159,8 +159,7 @@ st.markdown("""
 # Header
 st.markdown("""
 <div class="main-header">
-    <h1>🤖 Broker-GPT Enterprise</h1>
-    <p>Advanced Insurance Broker Assistant Platform</p>
+    <h3>🤖 Broker-GPT </h3>
 </div>
 """, unsafe_allow_html=True)
 
@@ -323,8 +322,8 @@ if st.session_state.selected_company:
     selected_company = st.session_state.selected_company
     
     # Display selected company with logo
-    st.markdown("### Currently Selected:")
-    display_company_with_logo(selected_company, size=60)
+    #st.markdown("### Currently Selected:")
+    display_company_with_logo(selected_company, size=70)
     
     # Navigation tabs
     #st.markdown('<div class="nav-tabs">', unsafe_allow_html=True)
