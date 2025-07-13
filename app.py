@@ -52,8 +52,11 @@ if uploaded_pdf:
         f.write(uploaded_pdf.getbuffer())
     st.sidebar.success(f"✅ Uploaded: {uploaded_pdf.name}")
 
-# Vectorstore path in writable directory
-VECTORSTORE_ROOT = "/mount/tmp/vectorstores"
+# Determine vectorstore path (compatible with local & cloud)
+if os.getenv("IS_STREAMLIT_CLOUD") == "true":
+    VECTORSTORE_ROOT = "/mount/tmp/vectorstores"
+else:
+    VECTORSTORE_ROOT = "vectorstores"
 vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
 
 # Relearn PDFs
