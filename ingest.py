@@ -8,15 +8,16 @@ __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
+# Detect Streamlit Cloud
+def is_streamlit_cloud():
+    return os.environ.get("HOME") == "/home/adminuser"
+
 def ingest_company_pdfs(company_name: str, persist_directory: str = None):
     pdf_folder = os.path.join("data/pdfs", company_name)
 
-    # Detect Streamlit Cloud and use temp if needed
     if persist_directory is None:
-        if os.getenv("IS_STREAMLIT_CLOUD") == "true":
-            persist_directory = os.path.join("/mount/tmp/vectorstores", company_name)
-        else:
-            persist_directory = os.path.join("vectorstores", company_name)
+        base_path = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+        persist_directory = os.path.join(base_path, company_name)
 
     all_chunks = []
     for filename in os.listdir(pdf_folder):
