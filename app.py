@@ -52,7 +52,7 @@ if uploaded_pdf:
         f.write(uploaded_pdf.getbuffer())
     st.sidebar.success(f"✅ Uploaded: {uploaded_pdf.name}")
 
-# Determine vectorstore path (compatible with local & cloud)
+# Vectorstore path in local or Streamlit Cloud mode
 if os.getenv("IS_STREAMLIT_CLOUD") == "true":
     VECTORSTORE_ROOT = "/mount/tmp/vectorstores"
 else:
@@ -66,51 +66,80 @@ if st.sidebar.button("🔄 Relearn PDFs"):
     ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
     st.sidebar.success("✅ Re-ingested knowledge for " + selected_company)
 
+# === Navigation Buttons ===
+st.sidebar.markdown("---")
+view_mode = st.sidebar.radio("📌 View Mode", ["🔍 Ask Questions", "📊 Dashboard"])
+
 # === Main Area ===
 if not os.path.exists(vectorstore_path):
     st.info(f"Upload PDFs for **{selected_company}** and click 'Relearn PDFs' to start.")
 else:
-    st.markdown("---")
-    st.subheader(f"💬 Ask {selected_company} anything about their policies")
-    query = st.text_input("Type your question:")
+    if view_mode == "📊 Dashboard":
+        st.subheader("📊 Company Dashboard")
 
-    if query:
-        with st.spinner("🔍 Please wait while Broker-gpt searches and thinks..."):
-            retriever = Chroma(
-                persist_directory=vectorstore_path,
-                embedding_function=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
-            ).as_retriever()
+        # Count uploaded PDFs
+        company_pdf_dir = os.path.join(company_base_dir, selected_company)
+        uploaded_pdfs = [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
+        pdf_count = len(uploaded_pdfs)
 
-            docs = retriever.get_relevant_documents(query)
-            context = "\n\n".join([doc.page_content for doc in docs])
+        # Vector DB stats
+        db_exists = os.path.exists(vectorstore_path)
+        st.markdown(f"- **Company**: `{selected_company}`")
+        st.markdown(f"- **PDFs uploaded**: `{pdf_count}`")
+        st.markdown(f"- **Vectorstore exists**: `{'Yes ✅' if db_exists else 'No ❌'}`")
 
-            GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+        if db_exists:
+            # Show vectorstore file size
+            total_size = sum(
+                os.path.getsize(os.path.join(dp, f))
+                for dp, dn, filenames in os.walk(vectorstore_path)
+                for f in filenames
+            )
+            size_mb = round(total_size / 1024 / 1024, 2)
+            st.markdown(f"- **Vectorstore size**: `{size_mb} MB`")
 
-            payload = {
-                "contents": [{
-                    "parts": [{
-                        "text": f"""Answer the following question using the context below.
+    else:
+        st.markdown("---")
+        st.subheader(f"💬 Ask {selected_company} anything about their policies")
+        query = st.text_input("Type your question:")
+
+        if query:
+            with st.spinner("🔍 Please wait while Broker-gpt searches and thinks..."):
+                retriever = Chroma(
+                    persist_directory=vectorstore_path,
+                    embedding_function=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+                ).as_retriever()
+
+                docs = retriever.get_relevant_documents(query)
+                context = "\n\n".join([doc.page_content for doc in docs])
+
+                GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+
+                payload = {
+                    "contents": [{
+                        "parts": [{
+                            "text": f"""Answer the following question using the context below.
 
 Question: {query}
 
 Context: {context}
 """
+                        }]
                     }]
-                }]
-            }
+                }
 
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
+                headers = {"Content-Type": "application/json"}
+                response = requests.post(url, headers=headers, data=json.dumps(payload))
 
-        st.markdown("---")
-        st.markdown("### 🤖 Broker-gpt's Answer")
-        if response.status_code == 200:
-            try:
-                answer = response.json()['candidates'][0]['content']['parts'][0]['text']
-                st.success(answer)
-            except:
-                st.error("❌ Gemini replied but parsing failed.")
-        else:
-            st.error(f"❌ Gemini API Error: {response.status_code}")
-            st.json(response.json())
+            st.markdown("---")
+            st.markdown("### 🤖 Broker-gpt's Answer")
+            if response.status_code == 200:
+                try:
+                    answer = response.json()['candidates'][0]['content']['parts'][0]['text']
+                    st.success(answer)
+                except:
+                    st.error("❌ Gemini replied but parsing failed.")
+            else:
+                st.error(f"❌ Gemini API Error: {response.status_code}")
+                st.json(response.json())
