@@ -55,12 +55,12 @@ if uploaded_pdf:
 # Relearn PDFs
 if st.sidebar.button("🔄 Relearn PDFs"):
     from ingest import ingest_company_pdfs
-    shutil.rmtree(os.path.join("vectorstores", selected_company), ignore_errors=True)
+    shutil.rmtree(os.path.join(st.runtime.get_instance().runtime.media_mgr.media_dir, "vectorstores", selected_company), ignore_errors=True)
     ingest_company_pdfs(selected_company)
     st.sidebar.success("✅ Re-ingested knowledge for " + selected_company)
 
 # === Main Area ===
-vectorstore_path = os.path.join("vectorstores", selected_company)
+vectorstore_path = os.path.join(st.runtime.get_instance().runtime.media_mgr.media_dir, "vectorstores", selected_company)
 if not os.path.exists(vectorstore_path):
     st.info(f"Upload PDFs for **{selected_company}** and click 'Relearn PDFs' to start.")
 else:
