@@ -323,7 +323,7 @@ if st.session_state.selected_company:
     
     # Display selected company with logo
     #st.markdown("### Currently Selected:")
-    display_company_with_logo(selected_company, size=70)
+    #display_company_with_logo(selected_company, size=70)
     
     # Navigation tabs
     #st.markdown('<div class="nav-tabs">', unsafe_allow_html=True)
@@ -344,7 +344,7 @@ if st.session_state.selected_company:
     vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
     
     if not os.path.exists(vectorstore_path):
-        st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.")
+        st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.") 
     else:
         if st.session_state.current_view == "Dashboard":
             st.markdown("---")
@@ -391,7 +391,8 @@ if st.session_state.selected_company:
         
         else:  # Ask Questions view
             st.markdown("---")
-            st.subheader(f"💬 Ask {selected_company} Questions")
+            display_company_with_logo(selected_company, size=70)
+            st.subheader(f"💬 Ask {selected_company} Questions") 
             
             query = st.text_input("🔍 Enter your question:", placeholder="What are the coverage details for...")
             
