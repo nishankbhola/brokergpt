@@ -54,38 +54,6 @@ def get_company_logo(company_name):
         return Image.open(logo_path)
     return None
 
-def display_company_with_logo(company_name, size=50):
-    """Display company name with logo if available"""
-    logo = get_company_logo(company_name)
-    if logo:
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            st.image(logo, width=size)
-    else:
-        st.markdown(f"🏢 **{company_name}**")
-
-def check_admin_password():
-    """Check if admin password is correct"""
-    if 'admin_authenticated' not in st.session_state:
-        st.session_state.admin_authenticated = False
-    
-    if not st.session_state.admin_authenticated:
-        with st.form("admin_login"):
-            st.subheader("🔐 Admin Access Required")
-            password = st.text_input("Enter admin password:", type="password")
-            submitted = st.form_submit_button("Login")
-            
-            if submitted:
-                if password == "classmate":
-                    st.session_state.admin_authenticated = True
-                    st.success("✅ Admin access granted!")
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid password")
-                    return False
-        return False
-    return True
-
 def get_available_companies():
     """Get list of available companies"""
     company_base_dir = "data/pdfs"
@@ -103,83 +71,180 @@ load_dotenv()
 st.set_page_config(
     page_title="🤖 Broker-GPT",
     layout="wide",
-    initial_sidebar_state="collapsed"  # Start with sidebar collapsed for regular users
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS for professional styling
+# Claude-like CSS styling
 st.markdown("""
 <style>
+    /* Import Google Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    /* Global styles */
+    .stApp {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Header styling */
     .main-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 0.1rem;
-        border-radius: 1px;
-        margin-bottom: 0.1rem;
-        text-align: center;
-    }
-    .company-selector {
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
         padding: 1rem;
-        margin-bottom: 1rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        text-align: center;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
-    .query-container {
-        background: white;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
+    
+    /* Company selector - Claude style */
+    .company-selector {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
         padding: 1.5rem;
-        margin-bottom: 1rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-    .submit-button {
-        background: #2a5298;
+    
+    /* Chat interface - Claude style */
+    .chat-container {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 0;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        overflow: hidden;
+    }
+    
+    .chat-input {
+        border: none;
+        border-top: 1px solid #e2e8f0;
+        padding: 1rem;
+        background: #f8fafc;
+    }
+    
+    .chat-messages {
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 1rem;
+    }
+    
+    /* Submit button - Claude style */
+    .submit-btn {
+        background: #2563eb;
         color: white;
         border: none;
-        border-radius: 5px;
-        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        padding: 0.75rem 1.5rem;
+        font-weight: 500;
         cursor: pointer;
+        transition: all 0.2s;
+        box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
     }
-    .company-dropdown {
-        min-width: 200px;
+    
+    .submit-btn:hover {
+        background: #1d4ed8;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
     }
+    
+    /* Sidebar styling */
+    .sidebar-content {
+        background: #f1f5f9;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* Admin section styling */
     .admin-section {
-        background: #fff5f5;
-        border: 2px solid #feb2b2;
-        border-radius: 10px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 12px;
         padding: 1rem;
         margin: 1rem 0;
     }
-    .success-zone {
-        background: #f0fff4;
-        border: 2px solid #9ae6b4;
-        border-radius: 10px;
+    
+    .admin-success {
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 12px;
         padding: 1rem;
         margin: 1rem 0;
     }
+    
+    /* Response styling */
+    .response-container {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    /* No company message */
     .no-company-message {
-        background: #fff8dc;
-        border: 2px solid #ffd700;
-        border-radius: 10px;
-        padding: 2rem;
+        background: linear-gradient(135deg, #fef3c7 0%, #f59e0b 100%);
+        color: #92400e;
+        border-radius: 12px;
+        padding: 3rem;
         text-align: center;
         margin: 2rem 0;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        transition: all 0.2s;
+        font-weight: 500;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Selectbox styling */
+    .stSelectbox > div > div {
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+    }
+    
+    /* Text area styling */
+    .stTextArea > div > div > textarea {
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Form styling */
+    .stForm {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    /* Logo styling */
+    .company-logo {
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 </style>
-""", unsafe_allow_html=True)
-
-# Header
-st.markdown("""
-<div class="main-header">
-    <h4>🤖 Broker-GPT </h4>
-</div>
 """, unsafe_allow_html=True)
 
 # Initialize session state
 if 'selected_company' not in st.session_state:
     st.session_state.selected_company = None
-if 'current_view' not in st.session_state:
-    st.session_state.current_view = "Ask Questions"
 if 'admin_authenticated' not in st.session_state:
     st.session_state.admin_authenticated = False
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
 
 # Create necessary directories
 company_base_dir = "data/pdfs"
@@ -194,81 +259,113 @@ available_companies = get_available_companies()
 if not st.session_state.selected_company and available_companies:
     st.session_state.selected_company = available_companies[0]
 
-# Admin sidebar (only visible to authenticated admins)
-if st.session_state.admin_authenticated:
-    with st.sidebar:
-        st.header("🏢 Company Management")
+# Header
+st.markdown("""
+<div class="main-header">
+    <h2>🤖 Broker-GPT</h2>
+    <p>Your AI-powered insurance broker assistant</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Sidebar
+with st.sidebar:
+    st.markdown("### 🏢 Company Management")
+    
+    # Company selection
+    if available_companies:
+        st.markdown('<div class="sidebar-content">', unsafe_allow_html=True)
+        st.markdown("**Select Company:**")
         
-        # Company selection for admin
-        st.markdown("### 📁 Select Company")
+        for company in available_companies:
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                if st.button(f"📂 {company}", key=f"select_{company}", use_container_width=True):
+                    st.session_state.selected_company = company
+                    st.session_state.chat_history = []  # Clear chat history when switching
+                    st.rerun()
+            
+            with col2:
+                logo = get_company_logo(company)
+                if logo:
+                    st.image(logo, width=25)
         
-        if available_companies:
-            for company in available_companies:
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    if st.button(f"📂 {company}", key=f"select_{company}"):
-                        st.session_state.selected_company = company
-                        st.rerun()
-                
-                with col2:
-                    logo = get_company_logo(company)
-                    if logo:
-                        st.image(logo, width=30)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Admin section
+    if not st.session_state.admin_authenticated:
+        st.markdown("### 🔐 Admin Access")
+        with st.form("admin_login_form"):
+            password = st.text_input("Password:", type="password", key="admin_password")
+            login_btn = st.form_submit_button("Login", use_container_width=True)
+            
+            if login_btn:
+                if password == "classmate":
+                    st.session_state.admin_authenticated = True
+                    st.success("✅ Admin access granted!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid password")
+    else:
+        st.markdown('<div class="admin-success">', unsafe_allow_html=True)
+        st.success("🔓 Admin Mode Active")
         
-        # Add new company
-        st.markdown("---")
-        st.markdown("### ➕ Add New Company")
+        if st.button("🔒 Logout", use_container_width=True):
+            st.session_state.admin_authenticated = False
+            st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Admin controls
+        st.markdown("### ➕ Add Company")
         with st.form("add_company_form"):
             new_company = st.text_input("Company Name:")
-            logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
-            add_submitted = st.form_submit_button("Add Company")
+            logo_file = st.file_uploader("Logo (PNG):", type=['png', 'jpg', 'jpeg'])
+            add_btn = st.form_submit_button("Add Company", use_container_width=True)
             
-            if add_submitted and new_company:
+            if add_btn and new_company:
                 new_path = os.path.join(company_base_dir, new_company)
                 if not os.path.exists(new_path):
                     os.makedirs(new_path)
                     
-                    # Save logo if uploaded
                     if logo_file is not None:
                         logo_path = os.path.join(logos_dir, f"{new_company}.png")
                         with open(logo_path, "wb") as f:
                             f.write(logo_file.getbuffer())
                     
-                    st.success(f"✅ Added company: {new_company}")
+                    st.success(f"✅ Added: {new_company}")
+                    time.sleep(1)
                     st.rerun()
                 else:
-                    st.warning("⚠️ Company already exists")
+                    st.warning("⚠️ Company exists")
         
-        # Upload PDFs (admin only)
+        # Upload PDFs
         if st.session_state.selected_company:
-            st.markdown("---")
             st.markdown("### 📄 Upload PDFs")
-            
-            selected_company = st.session_state.selected_company
             uploaded_pdf = st.file_uploader(
-                f"Upload PDF to {selected_company}:", 
-                type="pdf", 
-                key="pdf_uploader"
+                f"Upload to {st.session_state.selected_company}:", 
+                type="pdf"
             )
             
             if uploaded_pdf:
-                save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
+                save_path = os.path.join(company_base_dir, st.session_state.selected_company, uploaded_pdf.name)
                 with open(save_path, "wb") as f:
                     f.write(uploaded_pdf.getbuffer())
                 st.success(f"✅ Uploaded: {uploaded_pdf.name}")
+                time.sleep(1)
                 st.rerun()
             
-            # Admin controls for selected company
-            st.markdown("---")
+            # Admin actions
             st.markdown("### ⚙️ Admin Actions")
             
-            # Relearn PDFs
-            if st.button("🔄 Relearn PDFs"):
+            if st.button("🔄 Relearn PDFs", use_container_width=True):
                 try:
                     from ingest import ingest_company_pdfs
                     
                     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-                    vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+                    vectorstore_path = os.path.join(VECTORSTORE_ROOT, st.session_state.selected_company)
                     
                     if os.path.exists(vectorstore_path):
                         shutil.rmtree(vectorstore_path, ignore_errors=True)
@@ -276,82 +373,76 @@ if st.session_state.admin_authenticated:
                     time.sleep(1)
                     os.makedirs(vectorstore_path, exist_ok=True)
                     
-                    ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
+                    ingest_company_pdfs(st.session_state.selected_company, persist_directory=vectorstore_path)
                     
                     if 'vectorstore' in st.session_state:
                         del st.session_state['vectorstore']
                     
                     st.success("✅ Knowledge base updated!")
+                    time.sleep(1)
                     st.rerun()
                     
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
             
-            # Delete company data
+            # Delete company
             st.markdown('<div class="admin-section">', unsafe_allow_html=True)
-            st.markdown("#### 🗑️ Danger Zone")
+            st.markdown("**⚠️ Danger Zone**")
             
-            if st.button("🗑️ Delete All Company Data", type="secondary"):
-                if st.button("⚠️ CONFIRM DELETE", key="confirm_delete"):
+            if st.button("🗑️ Delete Company", type="secondary", use_container_width=True):
+                if st.button("⚠️ CONFIRM DELETE", key="confirm_delete", use_container_width=True):
                     try:
-                        # Delete PDFs
-                        company_path = os.path.join(company_base_dir, selected_company)
+                        # Delete company data
+                        company_path = os.path.join(company_base_dir, st.session_state.selected_company)
                         if os.path.exists(company_path):
                             shutil.rmtree(company_path)
                         
                         # Delete vectorstore
                         VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-                        vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+                        vectorstore_path = os.path.join(VECTORSTORE_ROOT, st.session_state.selected_company)
                         if os.path.exists(vectorstore_path):
                             shutil.rmtree(vectorstore_path)
                         
                         # Delete logo
-                        logo_path = os.path.join(logos_dir, f"{selected_company}.png")
+                        logo_path = os.path.join(logos_dir, f"{st.session_state.selected_company}.png")
                         if os.path.exists(logo_path):
                             os.remove(logo_path)
                         
-                        st.success(f"✅ Deleted all data for {selected_company}")
+                        st.success(f"✅ Deleted: {st.session_state.selected_company}")
                         st.session_state.selected_company = None
+                        st.session_state.chat_history = []
+                        time.sleep(1)
                         st.rerun()
                         
                     except Exception as e:
-                        st.error(f"❌ Error deleting: {str(e)}")
+                        st.error(f"❌ Error: {str(e)}")
             
             st.markdown('</div>', unsafe_allow_html=True)
 
 # Main content area
 if not available_companies:
-    # No companies available
-    st.markdown('<div class="no-company-message">', unsafe_allow_html=True)
     st.markdown("""
-    ## 🏢 No Companies Available
-    
-    There are currently no companies configured in the system.
-    
-    **Please contact the administrator** to add companies and configure the knowledge base.
-    
-    ### 📞 Need Help?
-    - Contact your system administrator
-    - Request company setup and PDF uploads
-    - Ensure proper knowledge base configuration
-    """)
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Admin access button at bottom
-    st.markdown("---")
-    if st.button("🔐 Admin Access", key="admin_access_main"):
-        if check_admin_password():
-            st.rerun()
+    <div class="no-company-message">
+        <h2>🏢 No Companies Available</h2>
+        <p>There are currently no companies configured in the system.</p>
+        <p><strong>Please contact the administrator</strong> to add companies and configure the knowledge base.</p>
+        <hr>
+        <p>📞 <strong>Need Help?</strong></p>
+        <p>• Contact your system administrator<br>
+        • Request company setup and PDF uploads<br>
+        • Ensure proper knowledge base configuration</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 elif st.session_state.selected_company:
     selected_company = st.session_state.selected_company
     
-    # Company selector dropdown (similar to Claude's model selector)
+    # Company selector with logo - Claude style
     st.markdown('<div class="company-selector">', unsafe_allow_html=True)
-    col1, col2 = st.columns([3, 1])
+    col1, col2 = st.columns([4, 1])
     
     with col1:
-        st.markdown("### 🏢 Selected Company")
+        st.markdown("**Selected Company:**")
         
         # Company dropdown
         company_index = available_companies.index(selected_company) if selected_company in available_companies else 0
@@ -365,45 +456,64 @@ elif st.session_state.selected_company:
         
         if selected_company_new != selected_company:
             st.session_state.selected_company = selected_company_new
+            st.session_state.chat_history = []
             st.rerun()
     
     with col2:
         logo = get_company_logo(selected_company)
         if logo:
-            st.image(logo, width=60)
+            st.image(logo, width=80, caption="", use_column_width=False)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Path handling
+    # Check if knowledge base exists
     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
     vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
     
     if not os.path.exists(vectorstore_path):
-        st.warning(f"📚 Knowledge base not ready for **{selected_company}**. Please contact admin to set up PDFs and relearn the knowledge base.")
+        st.warning(f"📚 Knowledge base not ready for **{selected_company}**. Please contact admin to upload PDFs and click 'Relearn PDFs'.")
     else:
-        # Query interface (similar to Claude's interface)
-        st.markdown('<div class="query-container">', unsafe_allow_html=True)
-        st.markdown("### 💬 Ask Questions")
+        # Chat interface - Claude style
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
         
-        # Form for query submission
-        with st.form("query_form"):
-            query = st.text_area(
-                "🔍 Enter your question:",
-                placeholder="Ask me anything about underwriting, policies, or company procedures...",
-                height=100,
-                key="query_input"
-            )
+        # Chat messages area
+        st.markdown('<div class="chat-messages">', unsafe_allow_html=True)
+        
+        # Display chat history
+        for i, (query, response) in enumerate(st.session_state.chat_history):
+            st.markdown(f"**You:** {query}")
+            st.markdown(f"**Broker-GPT:** {response}")
+            if i < len(st.session_state.chat_history) - 1:
+                st.markdown("---")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Chat input area
+        st.markdown('<div class="chat-input">', unsafe_allow_html=True)
+        
+        with st.form("chat_form", clear_on_submit=True):
+            col1, col2 = st.columns([5, 1])
             
-            # Submit button
-            col1, col2, col3 = st.columns([1, 1, 4])
+            with col1:
+                query = st.text_area(
+                    "Message Broker-GPT...",
+                    placeholder="Ask me anything about underwriting, policies, or company procedures...",
+                    height=100,
+                    key="chat_input",
+                    label_visibility="collapsed"
+                )
+            
             with col2:
-                submitted = st.form_submit_button("Submit", use_container_width=True)
+                st.write("")  # Spacing
+                st.write("")  # Spacing
+                submitted = st.form_submit_button("Send", use_container_width=True)
         
+        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Process query
         if submitted and query:
-            with st.spinner("🤖 Broker-GPT is analyzing your question..."):
+            with st.spinner("🤖 Broker-GPT is thinking..."):
                 try:
                     if 'vectorstore' not in st.session_state:
                         st.session_state['vectorstore'] = create_chroma_vectorstore(vectorstore_path)
@@ -434,23 +544,16 @@ Please provide a clear, professional response that would be helpful for insuranc
                     headers = {"Content-Type": "application/json"}
                     response = requests.post(url, headers=headers, data=json.dumps(payload))
 
-                    st.markdown("---")
                     if response.status_code == 200:
                         try:
                             answer = response.json()['candidates'][0]['content']['parts'][0]['text']
-                            st.markdown("### 🤖 Broker-GPT Response")
-                            st.markdown(f"**Question:** {query}")
-                            st.markdown("**Answer:**")
-                            st.success(answer)
                             
-                            # Show source documents
-                            if docs:
-                                with st.expander("📚 Source Documents"):
-                                    for i, doc in enumerate(docs[:3]):  # Show top 3 sources
-                                        st.markdown(f"**Source {i+1}:**")
-                                        st.text(doc.page_content[:500] + "...")
-                                        st.markdown("---")
-                                        
+                            # Add to chat history
+                            st.session_state.chat_history.append((query, answer))
+                            
+                            # Rerun to show new message
+                            st.rerun()
+                            
                         except Exception as e:
                             st.error("❌ Error parsing response from Gemini")
                     else:
@@ -458,22 +561,16 @@ Please provide a clear, professional response that would be helpful for insuranc
                         
                 except Exception as e:
                     st.error(f"❌ Error accessing knowledge base: {str(e)}")
-                    st.info("💡 Please contact admin to rebuild the knowledge base.")
                     if 'vectorstore' in st.session_state:
                         del st.session_state['vectorstore']
-
-# Admin access button at bottom (for non-admin users)
-if not st.session_state.admin_authenticated:
-    st.markdown("---")
-    if st.button("🔐 Admin Access", key="admin_access_bottom"):
-        if check_admin_password():
-            st.rerun()
 
 # Footer
 st.markdown("---")
 st.markdown(
-    "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 6.1.0 | 2025"
-    "</div>", 
+    """
+    <div style='text-align: center; color: #64748b; font-size: 14px; margin-top: 2rem;'>
+        🤖 Broker-GPT | Powered by AI | Version 7.0.0 | 2025
+    </div>
+    """, 
     unsafe_allow_html=True
 )
