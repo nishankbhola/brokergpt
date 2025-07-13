@@ -16,8 +16,28 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 def is_streamlit_cloud():
     return os.environ.get("HOME") == "/home/adminuser"
 
+def force_cleanup_vectorstore(vectorstore_path):
+    """Force cleanup of vectorstore directory"""
+    if os.path.exists(vectorstore_path):
+        try:
+            # Remove all database files
+            for root, dirs, files in os.walk(vectorstore_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    if file.endswith(('.sqlite3', '.db', '.wal', '.shm', '.lock')):
+                        try:
+                            os.chmod(file_path, 0o777)
+                            os.remove(file_path)
+                        except:
+                            pass
+            
+            shutil.rmtree(vectorstore_path, ignore_errors=True)
+            time.sleep(1)
+        except Exception as e:
+            print(f"Cleanup error: {e}")
+
 def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=3):
-    """Create Chroma vectorstore with retry logic and company-specific caching"""
+    """Create Chroma vectorstore with improved error handling"""
     for attempt in range(max_retries):
         try:
             # Clear any existing chroma client for this company
@@ -25,29 +45,35 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=3):
             if vectorstore_key in st.session_state:
                 del st.session_state[vectorstore_key]
             
+            # Force cleanup before creating
+            force_cleanup_vectorstore(vectorstore_path)
             os.makedirs(vectorstore_path, exist_ok=True)
             
             vectorstore = Chroma(
                 persist_directory=vectorstore_path,
                 embedding_function=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2"),
-                client_settings=None
+                client_settings=None,
+                collection_name="documents"
             )
             
+            # Test the connection
             vectorstore._client.heartbeat()
+            
+            # Try a simple query to verify it works
+            try:
+                vectorstore.similarity_search("test", k=1)
+            except:
+                pass  # It's okay if there are no documents yet
+            
             return vectorstore
             
         except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
                 time.sleep(2)
-                if os.path.exists(vectorstore_path):
-                    for file in os.listdir(vectorstore_path):
-                        if file.endswith('.sqlite3') or file.endswith('.db'):
-                            try:
-                                os.remove(os.path.join(vectorstore_path, file))
-                            except:
-                                pass
+                force_cleanup_vectorstore(vectorstore_path)
             else:
-                raise e
+                raise Exception(f"Failed to create vectorstore after {max_retries} attempts: {str(e)}")
 
 def get_company_logo(company_name):
     """Get company logo if it exists"""
@@ -294,22 +320,29 @@ with st.sidebar:
                     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
                     vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
                     
-                    if os.path.exists(vectorstore_path):
-                        shutil.rmtree(vectorstore_path, ignore_errors=True)
-                    
-                    time.sleep(1)
-                    os.makedirs(vectorstore_path, exist_ok=True)
-                    
-                    ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
-                    
-                    # Clear the cached vectorstore for this company
+                    # Clear the cached vectorstore for this company FIRST
                     clear_company_vectorstore_cache(selected_company)
                     
-                    st.success("✅ Knowledge base updated!")
+                    # Force cleanup the directory
+                    force_cleanup_vectorstore(vectorstore_path)
+                    
+                    # Small delay to ensure cleanup is complete
+                    time.sleep(2)
+                    
+                    # Create fresh directory
+                    os.makedirs(vectorstore_path, exist_ok=True)
+                    
+                    # Run the ingestion
+                    with st.spinner("📚 Processing PDFs and creating knowledge base..."):
+                        ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
+                    
+                    st.success("✅ Knowledge base updated successfully!")
                     st.rerun()
                     
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
+                    # Clear cache on error
+                    clear_company_vectorstore_cache(selected_company)
             
             # Delete company data
             st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
@@ -329,8 +362,7 @@ with st.sidebar:
                         # Delete vectorstore
                         VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
                         vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
-                        if os.path.exists(vectorstore_path):
-                            shutil.rmtree(vectorstore_path)
+                        force_cleanup_vectorstore(vectorstore_path)
                         
                         # Delete logo
                         logo_path = os.path.join(logos_dir, f"{selected_company}.png")
@@ -485,7 +517,7 @@ else:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 6.0.2 | 2025"
+    "🤖 Broker-GPT | Powered by AI | Version 6.0.3 | 2025"
     "</div>", 
     unsafe_allow_html=True
 )
