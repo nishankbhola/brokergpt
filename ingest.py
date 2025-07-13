@@ -11,9 +11,12 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 def ingest_company_pdfs(company_name: str, persist_directory: str = None):
     pdf_folder = os.path.join("data/pdfs", company_name)
 
-    # Use /mount/tmp as fallback if no path is provided
+    # Detect Streamlit Cloud and use temp if needed
     if persist_directory is None:
-        persist_directory = os.path.join("/mount/tmp/vectorstores", company_name)
+        if os.getenv("IS_STREAMLIT_CLOUD") == "true":
+            persist_directory = os.path.join("/mount/tmp/vectorstores", company_name)
+        else:
+            persist_directory = os.path.join("vectorstores", company_name)
 
     all_chunks = []
     for filename in os.listdir(pdf_folder):
@@ -28,7 +31,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
             all_chunks.extend(chunks)
 
     os.makedirs(persist_directory, exist_ok=True)
-
     vectordb = Chroma.from_documents(
         documents=all_chunks,
         embedding=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2"),
