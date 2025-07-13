@@ -1,6 +1,6 @@
-#import pysqlite3 as sqlite3
-#import sys
-#sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+import pysqlite3 as sqlite3
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import os
 import shutil
 import json
