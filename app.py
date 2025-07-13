@@ -327,7 +327,7 @@ if st.session_state.selected_company:
     display_company_with_logo(selected_company, size=60)
     
     # Navigation tabs
-    st.markdown('<div class="nav-tabs">', unsafe_allow_html=True)
+    #st.markdown('<div class="nav-tabs">', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     
     with col1:
