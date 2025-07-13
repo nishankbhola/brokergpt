@@ -195,12 +195,12 @@ os.makedirs(logos_dir, exist_ok=True)
 
 # Sidebar for company management
 with st.sidebar:
-    st.header("🏢 Company Management")
+    # st.header("🏢 Company Management")
     
-    # Admin section
-    st.markdown("### 🔧 Admin Controls")
-    if st.button("🔐 Admin Access"):
-        st.session_state.admin_authenticated = False
+    # # Admin section
+    # st.markdown("### 🔧 Admin Controls")
+    # if st.button("🔐 Admin Access"):
+    #     st.session_state.admin_authenticated = False
 
 
     
