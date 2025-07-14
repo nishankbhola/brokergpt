@@ -120,12 +120,14 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        /*background: linear-gradient(90deg, #1e3c72, #2a5298);*/
         color: white;
+        text-align: center;
+        /*background: linear-gradient(90deg, #1e3c72, #2a5298);
+        
         padding: 0.1rem;
         border-radius: 1px;
         margin-bottom: 0.1rem;
-        text-align: center;
+        */
     }
     .company-card {
         background: white;
