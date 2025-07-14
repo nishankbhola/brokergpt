@@ -179,7 +179,7 @@ st.markdown("""
 # Header
 st.markdown("""
 <div class="main-header">
-    <h4>🤖 Broker-GPT </h4>
+    <h4>🤖 Broker-GPTT </h4>
 </div>
 """, unsafe_allow_html=True)
 
