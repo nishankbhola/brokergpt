@@ -106,8 +106,25 @@ def get_company_vectorstore(company_name, vectorstore_path):
     
     return st.session_state[vectorstore_key]
 
+def get_uploaded_pdfs(company_name):
+    """Get list of uploaded PDFs for a company"""
+    company_pdf_dir = os.path.join("data/pdfs", company_name)
+    if os.path.exists(company_pdf_dir):
+        return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
+    return []
+
 # Load environment variables
 load_dotenv()
+
+# Initialize session state
+if 'selected_company' not in st.session_state:
+    st.session_state.selected_company = None
+if 'current_view' not in st.session_state:
+    st.session_state.current_view = "Ask Questions"
+if 'upload_success_message' not in st.session_state:
+    st.session_state.upload_success_message = None
+if 'processed_files' not in st.session_state:
+    st.session_state.processed_files = set()
 
 # Page configuration
 st.set_page_config(
@@ -183,12 +200,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Initialize session state
-if 'selected_company' not in st.session_state:
-    st.session_state.selected_company = None
-if 'current_view' not in st.session_state:
-    st.session_state.current_view = "Ask Questions"
-
 # Create necessary directories
 company_base_dir = "data/pdfs"
 logos_dir = "data/logos"
@@ -203,7 +214,6 @@ with st.sidebar:
     st.markdown("### 🔧 Admin Controls")
     if st.button("🔐 Admin Access"):
         st.session_state.admin_authenticated = False
-
 
     
     if check_admin_password():
@@ -235,8 +245,6 @@ with st.sidebar:
         
         st.markdown('</div>', unsafe_allow_html=True)
 
-
-
     
     # Company selection
     st.markdown("---")
@@ -259,6 +267,8 @@ with st.sidebar:
                     clear_company_vectorstore_cache(st.session_state.selected_company)
                 
                 st.session_state.selected_company = company
+                # Clear upload success message when switching companies
+                st.session_state.upload_success_message = None
                 st.rerun()
         
         with col2:
@@ -268,7 +278,6 @@ with st.sidebar:
     
     if st.session_state.selected_company:
         
-        
         # Admin controls for selected company
         if st.session_state.get('admin_authenticated', False):
 
@@ -276,19 +285,49 @@ with st.sidebar:
             st.markdown("### 📄 Upload PDFs")
             
             selected_company = st.session_state.selected_company
+            
+            # Display current PDFs
+            current_pdfs = get_uploaded_pdfs(selected_company)
+            if current_pdfs:
+                st.markdown("**Current PDFs:**")
+                for pdf in current_pdfs:
+                    st.markdown(f"• {pdf}")
+            
+            # File uploader with unique key to prevent conflicts
             uploaded_pdf = st.file_uploader(
                 f"Upload PDF to {selected_company}:", 
                 type="pdf", 
-                key="pdf_uploader"
+                key=f"pdf_uploader_{selected_company}"
             )
             
+            # Handle file upload without immediate rerun
             if uploaded_pdf:
-                save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
-                with open(save_path, "wb") as f:
-                    f.write(uploaded_pdf.getbuffer())
-                st.success(f"✅ Uploaded: {uploaded_pdf.name}")
-                st.rerun()
-
+                file_id = f"{selected_company}_{uploaded_pdf.name}_{uploaded_pdf.size}"
+                
+                # Only process if this file hasn't been processed yet
+                if file_id not in st.session_state.processed_files:
+                    try:
+                        save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
+                        with open(save_path, "wb") as f:
+                            f.write(uploaded_pdf.getbuffer())
+                        
+                        # Mark this file as processed
+                        st.session_state.processed_files.add(file_id)
+                        st.session_state.upload_success_message = f"✅ Uploaded: {uploaded_pdf.name}"
+                        
+                        # Small delay to ensure file is written
+                        time.sleep(0.1)
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error uploading file: {str(e)}")
+            
+            # Display upload success message if exists
+            if st.session_state.upload_success_message:
+                st.success(st.session_state.upload_success_message)
+                # Clear message after displaying
+                if st.button("✅ Continue", key="clear_upload_msg"):
+                    st.session_state.upload_success_message = None
+                    st.rerun()
             
             st.markdown("---")
             st.markdown("### ⚙️ Admin Actions")
@@ -344,6 +383,12 @@ with st.sidebar:
                         if os.path.exists(logo_path):
                             os.remove(logo_path)
                         
+                        # Clear processed files for this company
+                        st.session_state.processed_files = {
+                            f for f in st.session_state.processed_files 
+                            if not f.startswith(f"{selected_company}_")
+                        }
+                        
                         st.success(f"✅ Deleted all data for {selected_company}")
                         st.session_state.selected_company = None
                         st.rerun()
@@ -371,11 +416,7 @@ if st.session_state.selected_company:
             # Metrics
             col1, col2, col3 = st.columns(3)
             
-            company_pdf_dir = os.path.join(company_base_dir, selected_company)
-            uploaded_pdfs = []
-            if os.path.exists(company_pdf_dir):
-                uploaded_pdfs = [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
-            
+            uploaded_pdfs = get_uploaded_pdfs(selected_company)
             pdf_count = len(uploaded_pdfs)
             db_exists = os.path.exists(vectorstore_path)
             
@@ -473,6 +514,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                         st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
                         # Clear the cached vectorstore for this company
                         clear_company_vectorstore_cache(selected_company)
+    
     st.markdown("---")
     col1, col2 = st.columns(2)
     
