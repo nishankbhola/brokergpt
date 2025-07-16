@@ -16,8 +16,8 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 def is_streamlit_cloud():
     return os.environ.get("HOME") == "/home/adminuser"
 
-def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=3):
-    """Create Chroma vectorstore with retry logic and company-specific caching"""
+def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
+    """Create Chroma vectorstore with enhanced retry logic and company-specific caching"""
     for attempt in range(max_retries):
         try:
             # Clear any existing chroma client for this company
@@ -38,14 +38,21 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=3):
             
         except Exception as e:
             if attempt < max_retries - 1:
-                time.sleep(2)
+                wait_time = 2 * (attempt + 1)  # Exponential backoff
+                time.sleep(wait_time)
+                
+                # More aggressive cleanup on retry
                 if os.path.exists(vectorstore_path):
-                    for file in os.listdir(vectorstore_path):
-                        if file.endswith('.sqlite3') or file.endswith('.db'):
-                            try:
-                                os.remove(os.path.join(vectorstore_path, file))
-                            except:
-                                pass
+                    try:
+                        for file in os.listdir(vectorstore_path):
+                            if file.endswith('.sqlite3') or file.endswith('.db'):
+                                file_path = os.path.join(vectorstore_path, file)
+                                try:
+                                    os.remove(file_path)
+                                except:
+                                    pass
+                    except:
+                        pass
             else:
                 raise e
 
@@ -332,30 +339,64 @@ with st.sidebar:
             st.markdown("---")
             st.markdown("### ⚙️ Admin Actions")
             
-            # Relearn PDFs
+            # Enhanced Relearn PDFs with better error handling
             if st.button("🔄 Relearn PDFs"):
                 try:
                     from ingest import ingest_company_pdfs
                     
-                    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-                    vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
-                    
-                    if os.path.exists(vectorstore_path):
-                        shutil.rmtree(vectorstore_path, ignore_errors=True)
-                    
-                    time.sleep(1)
-                    os.makedirs(vectorstore_path, exist_ok=True)
-                    
-                    ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
-                    
-                    # Clear the cached vectorstore for this company
-                    clear_company_vectorstore_cache(selected_company)
-                    
-                    st.success("✅ Knowledge base updated!")
-                    st.rerun()
-                    
+                    with st.spinner("🔄 Rebuilding knowledge base..."):
+                        VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+                        vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+                        
+                        # Clear the cached vectorstore FIRST
+                        clear_company_vectorstore_cache(selected_company)
+                        
+                        # Remove existing vectorstore with better error handling
+                        if os.path.exists(vectorstore_path):
+                            try:
+                                shutil.rmtree(vectorstore_path, ignore_errors=True)
+                                time.sleep(2)  # Wait for cleanup
+                            except Exception as cleanup_error:
+                                st.warning(f"⚠️ Cleanup warning: {cleanup_error}")
+                        
+                        # Ensure directory exists
+                        os.makedirs(vectorstore_path, exist_ok=True)
+                        
+                        # Progress indicator
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        status_text.text("📖 Processing PDFs...")
+                        progress_bar.progress(25)
+                        
+                        # Run the ingestion
+                        vectordb = ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
+                        
+                        progress_bar.progress(75)
+                        status_text.text("✅ Finalizing...")
+                        
+                        # Small delay to ensure everything is written
+                        time.sleep(1)
+                        
+                        progress_bar.progress(100)
+                        status_text.text("🎉 Complete!")
+                        
+                        st.success("✅ Knowledge base updated successfully!")
+                        
+                        # Clear progress indicators
+                        time.sleep(1)
+                        st.rerun()
+                        
                 except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
+                    error_msg = str(e)
+                    if "no such table: tenants" in error_msg:
+                        st.error("❌ Database corruption detected. Please try again - this usually resolves the issue.")
+                        st.info("💡 If the problem persists, try deleting and re-adding the company data.")
+                    else:
+                        st.error(f"❌ Error: {error_msg}")
+                    
+                    # Clear any cached data that might be causing issues
+                    clear_company_vectorstore_cache(selected_company)
             
             # Delete company data
             st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
@@ -510,10 +551,15 @@ Please provide a clear, professional response that would be helpful for insuranc
                             st.error(f"❌ Gemini API Error: {response.status_code}")
                             
                     except Exception as e:
-                        st.error(f"❌ Error accessing knowledge base: {str(e)}")
-                        st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                        # Clear the cached vectorstore for this company
-                        clear_company_vectorstore_cache(selected_company)
+                        error_msg = str(e)
+                        if "no such table: tenants" in error_msg:
+                            st.error("❌ Database error detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
+                            clear_company_vectorstore_cache(selected_company)
+                        else:
+                            st.error(f"❌ Error accessing knowledge base: {error_msg}")
+                            st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
+                            # Clear the cached vectorstore for this company
+                            clear_company_vectorstore_cache(selected_company)
     
     st.markdown("---")
     col1, col2 = st.columns(2)
