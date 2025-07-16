@@ -1,6 +1,7 @@
 import os
 import time
 import shutil
+import sqlite3
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
@@ -15,13 +16,38 @@ def is_streamlit_cloud():
     return os.environ.get("HOME") == "/home/adminuser"
 
 def clean_vectorstore_directory(persist_directory):
-    """Clean up vectorstore directory completely"""
+    """Clean up vectorstore directory completely with better error handling"""
     if os.path.exists(persist_directory):
         try:
+            # Force close any open database connections
+            for root, dirs, files in os.walk(persist_directory):
+                for file in files:
+                    if file.endswith('.sqlite3') or file.endswith('.db'):
+                        db_path = os.path.join(root, file)
+                        try:
+                            # Try to close any open connections
+                            conn = sqlite3.connect(db_path)
+                            conn.close()
+                        except:
+                            pass
+            
+            # Wait a bit for connections to close
+            time.sleep(1)
+            
+            # Remove the directory
             shutil.rmtree(persist_directory)
             print(f"🧹 Cleaned up directory: {persist_directory}")
         except Exception as e:
             print(f"⚠️ Error cleaning directory: {e}")
+            # If we can't remove it, try to remove just the db files
+            try:
+                for root, dirs, files in os.walk(persist_directory):
+                    for file in files:
+                        if file.endswith('.sqlite3') or file.endswith('.db'):
+                            os.remove(os.path.join(root, file))
+                print("🧹 Cleaned up database files")
+            except:
+                pass
     
     # Ensure directory exists
     os.makedirs(persist_directory, exist_ok=True)
@@ -88,13 +114,18 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
     # Create embeddings
     embeddings = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
-    # Create vectorstore with retry logic
-    max_retries = 3
+    # Create vectorstore with enhanced retry logic
+    max_retries = 5
     for attempt in range(max_retries):
         try:
             print(f"🔄 Creating vectorstore (attempt {attempt + 1}/{max_retries})")
             
-            # Create vectorstore
+            # Extra cleanup on retry attempts
+            if attempt > 0:
+                clean_vectorstore_directory(persist_directory)
+                time.sleep(2)  # Wait longer on retries
+            
+            # Create vectorstore with explicit settings
             vectordb = Chroma.from_documents(
                 documents=all_chunks,
                 embedding=embeddings,
@@ -102,29 +133,40 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
                 client_settings=None  # Use default settings
             )
             
-            # Test the vectorstore
+            # Test the vectorstore immediately
+            print("🔍 Testing vectorstore connection...")
             vectordb._client.heartbeat()
             
+            # Do a quick search test
+            test_results = vectordb.similarity_search("test", k=1)
+            print(f"🔍 Vectorstore test: {len(test_results)} results found")
+            
             # Persist the vectorstore
+            print("💾 Persisting vectorstore...")
             vectordb.persist()
+            
+            # Final verification
+            print("✅ Final verification...")
+            vectordb._client.heartbeat()
             
             print(f"✅ Successfully created vectorstore for {company_name}")
             print(f"📈 Ingested {len(all_chunks)} chunks")
-            
-            # Verify the vectorstore works
-            test_results = vectordb.similarity_search("test", k=1)
-            print(f"🔍 Vectorstore verification: {len(test_results)} results found")
             
             return vectordb
             
         except Exception as e:
             print(f"❌ Attempt {attempt + 1} failed: {e}")
             
-            if attempt < max_retries - 1:
-                print("⏳ Waiting before retry...")
-                time.sleep(2)
-                # Clean up partial files
+            # Check if it's the specific tenants table error
+            if "no such table: tenants" in str(e):
+                print("🔧 Detected tenants table error - doing deep cleanup...")
+                # Force remove everything and wait longer
                 clean_vectorstore_directory(persist_directory)
+                time.sleep(3)
+            
+            if attempt < max_retries - 1:
+                print(f"⏳ Waiting {2 * (attempt + 1)} seconds before retry...")
+                time.sleep(2 * (attempt + 1))  # Exponential backoff
             else:
                 print("❌ All attempts failed")
                 raise e
