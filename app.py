@@ -611,7 +611,7 @@ if st.session_state.selected_company:
                         if not GEMINI_API_KEY:
                             st.error("❌ GEMINI_API_KEY not found in environment variables")
                             st.info("💡 Please add your Gemini API key to the .env file")
-                            return
+                            st.stop()
                         
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
