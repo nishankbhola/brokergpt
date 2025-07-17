@@ -2,7 +2,6 @@ import os
 import time
 import shutil
 import sqlite3
-import gc
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
@@ -15,10 +14,6 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 # Helper to detect cloud
 def is_streamlit_cloud():
     return os.environ.get("HOME") == "/home/adminuser"
-
-def force_garbage_collection():
-    """Force garbage collection to free memory"""
-    gc.collect()
 
 def clean_vectorstore_directory(persist_directory):
     """Clean up vectorstore directory completely with better error handling"""
@@ -38,7 +33,6 @@ def clean_vectorstore_directory(persist_directory):
             
             # Wait a bit for connections to close
             time.sleep(1)
-            force_garbage_collection()
             
             # Remove the directory
             shutil.rmtree(persist_directory)
@@ -96,8 +90,8 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
                 continue
                 
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=800,  # Reduced chunk size to save memory
-                chunk_overlap=100,  # Reduced overlap
+                chunk_size=1000, 
+                chunk_overlap=200,
                 length_function=len
             )
             chunks = splitter.split_documents(pages)
@@ -107,10 +101,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
                 print(f"✅ Added {len(chunks)} chunks from {filename}")
             else:
                 print(f"⚠️ No chunks created from {filename}")
-            
-            # Clean up after processing each file
-            del pages, chunks
-            force_garbage_collection()
                 
         except Exception as e:
             print(f"❌ Error processing {filename}: {e}")
@@ -120,12 +110,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
         raise ValueError("No chunks were created from any PDF files")
 
     print(f"📊 Total chunks to process: {len(all_chunks)}")
-    
-    # Limit total chunks to prevent memory issues
-    max_chunks = 5000  # Adjust based on your needs
-    if len(all_chunks) > max_chunks:
-        print(f"⚠️ Limiting chunks from {len(all_chunks)} to {max_chunks} to prevent memory issues")
-        all_chunks = all_chunks[:max_chunks]
 
     # Create embeddings
     embeddings = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -140,7 +124,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
             if attempt > 0:
                 clean_vectorstore_directory(persist_directory)
                 time.sleep(2)  # Wait longer on retries
-                force_garbage_collection()
             
             # Create vectorstore with explicit settings
             vectordb = Chroma.from_documents(
@@ -158,10 +141,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
             test_results = vectordb.similarity_search("test", k=1)
             print(f"🔍 Vectorstore test: {len(test_results)} results found")
             
-            # Clean up test results
-            del test_results
-            force_garbage_collection()
-            
             # Persist the vectorstore
             print("💾 Persisting vectorstore...")
             vectordb.persist()
@@ -172,10 +151,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
             
             print(f"✅ Successfully created vectorstore for {company_name}")
             print(f"📈 Ingested {len(all_chunks)} chunks")
-            
-            # Clean up before returning
-            del all_chunks
-            force_garbage_collection()
             
             return vectordb
             
@@ -188,11 +163,9 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
                 # Force remove everything and wait longer
                 clean_vectorstore_directory(persist_directory)
                 time.sleep(3)
-                force_garbage_collection()
             
             if attempt < max_retries - 1:
                 print(f"⏳ Waiting {2 * (attempt + 1)} seconds before retry...")
-                force_garbage_collection()
                 time.sleep(2 * (attempt + 1))  # Exponential backoff
             else:
                 print("❌ All attempts failed")
