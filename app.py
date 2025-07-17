@@ -7,8 +7,6 @@ import json
 import requests
 import streamlit as st
 import time
-import gc
-import psutil
 from PIL import Image
 from dotenv import load_dotenv
 from langchain.vectorstores import Chroma
@@ -18,48 +16,6 @@ from langchain_community.embeddings import SentenceTransformerEmbeddings
 def is_streamlit_cloud():
     return os.environ.get("HOME") == "/home/adminuser"
 
-@st.cache_resource
-def get_embedding_model():
-    """Cache the embedding model to avoid reloading"""
-    return SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
-
-def get_memory_usage():
-    """Get current memory usage in MB"""
-    try:
-        process = psutil.Process(os.getpid())
-        return process.memory_info().rss / 1024 / 1024  # Convert to MB
-    except:
-        return 0
-
-def force_garbage_collection():
-    """Force garbage collection to free memory"""
-    gc.collect()
-    
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def get_company_folders():
-    """Cache company folder list"""
-    company_base_dir = "data/pdfs"
-    if not os.path.exists(company_base_dir):
-        return []
-    return [f for f in os.listdir(company_base_dir) 
-            if os.path.isdir(os.path.join(company_base_dir, f))]
-
-@st.cache_data(ttl=300)  # Cache for 5 minutes
-def get_uploaded_pdfs_cached(company_name):
-    """Cached version of get_uploaded_pdfs"""
-    company_pdf_dir = os.path.join("data/pdfs", company_name)
-    if os.path.exists(company_pdf_dir):
-        return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
-    return []
-
-@st.cache_resource
-def get_cached_logo(company_name):
-    """Cache company logos to avoid repeated file I/O"""
-    logo_path = os.path.join("data/logos", f"{company_name}.png")
-    if os.path.exists(logo_path):
-        return Image.open(logo_path)
-    return None
-
 def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
     """Create Chroma vectorstore with enhanced retry logic and company-specific caching"""
     for attempt in range(max_retries):
@@ -67,21 +23,13 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
             # Clear any existing chroma client for this company
             vectorstore_key = f'vectorstore_{company_name}'
             if vectorstore_key in st.session_state:
-                # Properly close the old vectorstore
-                try:
-                    old_vectorstore = st.session_state[vectorstore_key]
-                    if hasattr(old_vectorstore, '_client'):
-                        old_vectorstore._client.reset()
-                except:
-                    pass
                 del st.session_state[vectorstore_key]
-                force_garbage_collection()
             
             os.makedirs(vectorstore_path, exist_ok=True)
             
             vectorstore = Chroma(
                 persist_directory=vectorstore_path,
-                embedding_function=get_embedding_model(),
+                embedding_function=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2"),
                 client_settings=None
             )
             
@@ -91,7 +39,6 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
         except Exception as e:
             if attempt < max_retries - 1:
                 wait_time = 2 * (attempt + 1)  # Exponential backoff
-                force_garbage_collection()  # Clean up memory before retry
                 time.sleep(wait_time)
                 
                 # More aggressive cleanup on retry
@@ -111,7 +58,10 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
 
 def get_company_logo(company_name):
     """Get company logo if it exists"""
-    return get_cached_logo(company_name)
+    logo_path = os.path.join("data/logos", f"{company_name}.png")
+    if os.path.exists(logo_path):
+        return Image.open(logo_path)
+    return None
 
 def display_company_with_logo(company_name, size=50):
     """Display company name with logo if available"""
@@ -151,24 +101,24 @@ def clear_company_vectorstore_cache(company_name):
     """Clear vectorstore cache for a specific company"""
     vectorstore_key = f'vectorstore_{company_name}'
     if vectorstore_key in st.session_state:
-        # Properly close the vectorstore before deletion
-        try:
-            vectorstore = st.session_state[vectorstore_key]
-            if hasattr(vectorstore, '_client'):
-                vectorstore._client.reset()
-        except:
-            pass
         del st.session_state[vectorstore_key]
-        force_garbage_collection()
 
-@st.cache_resource
-def get_company_vectorstore(_company_name, _vectorstore_path):
+def get_company_vectorstore(company_name, vectorstore_path):
     """Get or create company-specific vectorstore with proper caching"""
-    return create_chroma_vectorstore(_vectorstore_path, _company_name)
+    vectorstore_key = f'vectorstore_{company_name}'
+    
+    # Check if we have a cached vectorstore for this specific company
+    if vectorstore_key not in st.session_state:
+        st.session_state[vectorstore_key] = create_chroma_vectorstore(vectorstore_path, company_name)
+    
+    return st.session_state[vectorstore_key]
 
 def get_uploaded_pdfs(company_name):
     """Get list of uploaded PDFs for a company"""
-    return get_uploaded_pdfs_cached(company_name)
+    company_pdf_dir = os.path.join("data/pdfs", company_name)
+    if os.path.exists(company_pdf_dir):
+        return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
+    return []
 
 # Load environment variables
 load_dotenv()
@@ -202,14 +152,6 @@ st.markdown("""
         border-radius: 1px;
         margin-bottom: 0.1rem;
         */
-    }
-    .memory-info {
-        background: #f0f2f6;
-        border-radius: 5px;
-        padding: 0.5rem;
-        margin: 0.5rem 0;
-        font-size: 0.8rem;
-        color: #666;
     }
     .company-card {
         background: white;
@@ -265,17 +207,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Memory monitoring (only show in admin mode)
-if st.session_state.get('admin_authenticated', False):
-    memory_usage = get_memory_usage()
-    if memory_usage > 0:
-        memory_color = "🟢" if memory_usage < 500 else "🟡" if memory_usage < 800 else "🔴"
-        st.markdown(f"""
-        <div class="memory-info">
-            {memory_color} Memory Usage: {memory_usage:.1f} MB / 1024 MB
-        </div>
-        """, unsafe_allow_html=True)
-
 # Create necessary directories
 company_base_dir = "data/pdfs"
 logos_dir = "data/logos"
@@ -326,7 +257,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### 📁 Select Company")
     
-    company_folders = get_company_folders()
+    company_folders = [f for f in os.listdir(company_base_dir) 
+                      if os.path.isdir(os.path.join(company_base_dir, f))]
     
     if not company_folders:
         st.warning("⚠️ No companies found. Add one to begin.")
@@ -340,14 +272,10 @@ with st.sidebar:
                 # Clear vectorstore cache when switching companies
                 if st.session_state.selected_company and st.session_state.selected_company != company:
                     clear_company_vectorstore_cache(st.session_state.selected_company)
-                    force_garbage_collection()
                 
                 st.session_state.selected_company = company
                 # Clear upload success message when switching companies
                 st.session_state.upload_success_message = None
-                # Clear cached data for new company
-                get_uploaded_pdfs_cached.clear()
-                get_company_folders.clear()
                 st.rerun()
         
         with col2:
@@ -423,17 +351,11 @@ with st.sidebar:
                         # Clear the cached vectorstore FIRST
                         clear_company_vectorstore_cache(selected_company)
                         
-                        # Clear Streamlit cache for this company
-                        get_company_vectorstore.clear()
-                        get_uploaded_pdfs_cached.clear()
-                        force_garbage_collection()
-                        
                         # Remove existing vectorstore with better error handling
                         if os.path.exists(vectorstore_path):
                             try:
                                 shutil.rmtree(vectorstore_path, ignore_errors=True)
                                 time.sleep(2)  # Wait for cleanup
-                                force_garbage_collection()
                             except Exception as cleanup_error:
                                 st.warning(f"⚠️ Cleanup warning: {cleanup_error}")
                         
@@ -455,7 +377,6 @@ with st.sidebar:
                         
                         # Small delay to ensure everything is written
                         time.sleep(1)
-                        force_garbage_collection()
                         
                         progress_bar.progress(100)
                         status_text.text("🎉 Complete!")
@@ -476,7 +397,6 @@ with st.sidebar:
                     
                     # Clear any cached data that might be causing issues
                     clear_company_vectorstore_cache(selected_company)
-                    force_garbage_collection()
             
             # Delete company data
             st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
@@ -487,13 +407,6 @@ with st.sidebar:
                     try:
                         # Clear vectorstore cache first
                         clear_company_vectorstore_cache(selected_company)
-                        
-                        # Clear all related caches
-                        get_company_vectorstore.clear()
-                        get_uploaded_pdfs_cached.clear()
-                        get_company_folders.clear()
-                        get_cached_logo.clear()
-                        force_garbage_collection()
                         
                         # Delete PDFs
                         company_path = os.path.join(company_base_dir, selected_company)
@@ -517,7 +430,6 @@ with st.sidebar:
                             if not f.startswith(f"{selected_company}_")
                         }
                         
-                        force_garbage_collection()
                         st.success(f"✅ Deleted all data for {selected_company}")
                         st.session_state.selected_company = None
                         st.rerun()
@@ -592,98 +504,62 @@ if st.session_state.selected_company:
                         
                         retriever = vectorstore.as_retriever()
                         docs = retriever.get_relevant_documents(query)
-                        
-                        # Limit context size to prevent memory issues
-                        max_context_length = 8000  # Reduced from unlimited
-                        context_parts = []
-                        current_length = 0
-                        
-                        for doc in docs:
-                            if current_length + len(doc.page_content) > max_context_length:
-                                break
-                            context_parts.append(doc.page_content)
-                            current_length += len(doc.page_content)
-                        
-                        context = "\n\n".join(context_parts)
+                        context = "\n\n".join([doc.page_content for doc in docs])
 
                         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                        
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
                         payload = {
                             "contents": [{
                                 "parts": [{
-                                    "text": f"""You are a professional insurance broker assistant. Answer the following question using the context provided for {selected_company}.
+                                    "text": f"""As a professional insurance broker assistant, answer the following question using ONLY the context provided for {selected_company}.
 
 Question: {query}
 
-Context from {selected_company}:
-{context}
+Context from {selected_company}: {context}
 
-Instructions:
-- Provide a clear, professional response
-- Base your answer on the provided context
-- If the context doesn't contain relevant information, say so
-- Be helpful for insurance brokers and their clients"""
+Please provide a clear, professional response that would be helpful for insurance brokers and their clients. Base your answer ONLY on the provided context from {selected_company}.
+"""
                                 }]
                             }]
                         }
 
                         headers = {"Content-Type": "application/json"}
                         response = requests.post(url, headers=headers, data=json.dumps(payload))
-                        
-                        # Clean up variables to free memory
-                        del context_parts, context, payload
-                        force_garbage_collection()
 
                         st.markdown("---")
                         if response.status_code == 200:
-                            response_data = response.json()
-                            answer = response_data['candidates'][0]['content']['parts'][0]['text']
-                            
-                            st.markdown("### 🤖 Broker-GPT Response")
-                            st.markdown(f"**Company:** {selected_company}")
-                            st.markdown(f"**Question:** {query}")
-                            st.markdown("**Answer:**")
-                            st.success(answer)
-                            
-                            # Show source documents
-                            if docs:
-                                with st.expander("📚 Source Documents"):
-                                    for i, doc in enumerate(docs[:2]):  # Reduced to top 2 sources
-                                        st.markdown(f"**Source {i+1}:**")
-                                        st.text(doc.page_content[:300] + "...")  # Reduced preview length
-                                        st.markdown("---")
-                            
-                            # Clean up response data
-                            del answer, response, response_data
-                            force_garbage_collection()
+                            try:
+                                answer = response.json()['candidates'][0]['content']['parts'][0]['text']
+                                st.markdown("### 🤖 Broker-GPT Response")
+                                st.markdown(f"**Company:** {selected_company}")
+                                st.markdown(f"**Question:** {query}")
+                                st.markdown("**Answer:**")
+                                st.success(answer)
+                                
+                                # Show source documents
+                                if docs:
+                                    with st.expander("📚 Source Documents"):
+                                        for i, doc in enumerate(docs[:3]):  # Show top 3 sources
+                                            st.markdown(f"**Source {i+1}:**")
+                                            st.text(doc.page_content[:500] + "...")
+                                            st.markdown("---")
+                                            
+                            except Exception as e:
+                                st.error("❌ Error parsing response from Gemini")
                         else:
                             st.error(f"❌ Gemini API Error: {response.status_code}")
-                            try:
-                                error_data = response.json()
-                                st.json(error_data)
-                                
-                                # Show specific error message if available
-                                if 'error' in error_data:
-                                    error_info = error_data['error']
-                                    if 'message' in error_info:
-                                        st.error(f"Error details: {error_info['message']}")
-                            except:
-                                st.text(f"Raw error response: {response.text}")
                             
                     except Exception as e:
                         error_msg = str(e)
                         if "no such table: tenants" in error_msg:
                             st.error("❌ Database error detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
                             clear_company_vectorstore_cache(selected_company)
-                            force_garbage_collection()
                         else:
                             st.error(f"❌ Error accessing knowledge base: {error_msg}")
                             st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
                             # Clear the cached vectorstore for this company
                             clear_company_vectorstore_cache(selected_company)
-                            force_garbage_collection()
     
     st.markdown("---")
     col1, col2 = st.columns(2)
