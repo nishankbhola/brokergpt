@@ -1,4 +1,4 @@
-﻿# Python virtual environments
+# Python virtual environments
 venv/
 .venv/
 env/
@@ -32,3 +32,4 @@ Thumbs.db
 *.sqlite3
 # db/ # IMPORTANT: Uncomment this line ONLY if your 'db' folder contains local, generated database files
       # If your 'db' folder contains essential schema or initial data you NEED in your repo, leave this commented.
+.env
