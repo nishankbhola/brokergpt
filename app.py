@@ -684,56 +684,6 @@ Instructions:
                             # Clear the cached vectorstore for this company
                             clear_company_vectorstore_cache(selected_company)
                             force_garbage_collection()
-                                st.markdown("### 🤖 Broker-GPT Response")
-                                st.markdown(f"**Company:** {selected_company}")
-                                st.markdown(f"**Question:** {query}")
-                                st.markdown("**Answer:**")
-                                st.success(answer)
-                                
-                                # Show source documents
-                                if docs:
-                                    with st.expander("📚 Source Documents"):
-                                        for i, doc in enumerate(docs[:2]):  # Reduced to top 2 sources
-                                            st.markdown(f"**Source {i+1}:**")
-                                            st.text(doc.page_content[:300] + "...")  # Reduced preview length
-                                            st.markdown("---")
-                                
-                                # Clean up response data
-                                del answer, response, response_data
-                                force_garbage_collection()
-                                            
-                            except Exception as e:
-                                st.error(f"❌ Error parsing response from Gemini: {str(e)}")
-                                try:
-                                    st.json(response.json())  # Show raw response for debugging
-                                except:
-                                    st.text(f"Raw response: {response.text}")
-                        else:
-                            st.error(f"❌ Gemini API Error: {response.status_code}")
-                            try:
-                                error_data = response.json()
-                                st.json(error_data)
-                                
-                                # Show specific error message if available
-                                if 'error' in error_data:
-                                    error_info = error_data['error']
-                                    if 'message' in error_info:
-                                        st.error(f"Error details: {error_info['message']}")
-                            except:
-                                st.text(f"Raw error response: {response.text}")
-                            
-                    except Exception as e:
-                        error_msg = str(e)
-                        if "no such table: tenants" in error_msg:
-                            st.error("❌ Database error detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            clear_company_vectorstore_cache(selected_company)
-                            force_garbage_collection()
-                        else:
-                            st.error(f"❌ Error accessing knowledge base: {error_msg}")
-                            st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            # Clear the cached vectorstore for this company
-                            clear_company_vectorstore_cache(selected_company)
-                            force_garbage_collection()
     
     st.markdown("---")
     col1, col2 = st.columns(2)
