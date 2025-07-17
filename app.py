@@ -28,39 +28,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Cache the embedding model to load only once
-@st.cache_resource
-def get_embedding_model():
-    """Load and cache the sentence transformer model"""
-    return SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
-
-# Cache vectorstore creation
-@st.cache_resource
-def load_vectorstore(company_name):
-    """Load or create vectorstore for a company with proper caching"""
-    vectorstore_path = os.path.join(VECTORSTORE_ROOT, company_name)
-    
-    if not os.path.exists(vectorstore_path):
-        return None
-        
-    try:
-        # Use cached embedding model
-        embeddings = get_embedding_model()
-        
-        # Create vectorstore instance
-        vectorstore = Chroma(
-            persist_directory=vectorstore_path,
-            embedding_function=embeddings
-        )
-        
-        # Test connection
-        vectorstore._client.heartbeat()
-        return vectorstore
-        
-    except Exception as e:
-        st.error(f"Error loading vectorstore: {str(e)}")
-        return None
-
 # Initialize session state with defaults
 def init_session_state():
     defaults = {
@@ -95,27 +62,47 @@ def get_companies():
     """Get list of company folders"""
     return [f for f in os.listdir(COMPANY_BASE_DIR) if os.path.isdir(os.path.join(COMPANY_BASE_DIR, f))]
 
-@st.cache_data
 def get_company_logo(company_name):
-    """Get company logo if it exists - cached"""
+    """Get company logo if it exists"""
     logo_path = os.path.join(LOGOS_DIR, f"{company_name}.png")
-    if os.path.exists(logo_path):
-        return Image.open(logo_path)
-    return None
+    return Image.open(logo_path) if os.path.exists(logo_path) else None
 
 def get_uploaded_pdfs(company_name):
     """Get list of uploaded PDFs for a company"""
     company_pdf_dir = os.path.join(COMPANY_BASE_DIR, company_name)
     return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")] if os.path.exists(company_pdf_dir) else []
 
+def create_vectorstore(company_name):
+    """Create Chroma vectorstore with retry logic"""
+    vectorstore_path = os.path.join(VECTORSTORE_ROOT, company_name)
+    
+    for attempt in range(3):
+        try:
+            os.makedirs(vectorstore_path, exist_ok=True)
+            vectorstore = Chroma(
+                persist_directory=vectorstore_path,
+                embedding_function=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+            )
+            vectorstore._client.heartbeat()
+            return vectorstore
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2 * (attempt + 1))
+            else:
+                raise e
+
+def get_vectorstore(company_name):
+    """Get or create company-specific vectorstore with caching"""
+    cache_key = f'vectorstore_{company_name}'
+    if cache_key not in st.session_state:
+        st.session_state[cache_key] = create_vectorstore(company_name)
+    return st.session_state[cache_key]
+
 def clear_vectorstore_cache(company_name):
     """Clear vectorstore cache for a specific company"""
-    # Clear the cached vectorstore
-    load_vectorstore.clear()
-    
-    # Clear other related caches
-    if hasattr(st.session_state, 'current_vectorstore'):
-        del st.session_state.current_vectorstore
+    cache_key = f'vectorstore_{company_name}'
+    if cache_key in st.session_state:
+        del st.session_state[cache_key]
 
 def check_admin_auth():
     """Check admin authentication"""
@@ -136,11 +123,10 @@ def check_admin_auth():
 def handle_company_selection(company):
     """Handle company selection logic"""
     if st.session_state.selected_company != company:
+        if st.session_state.selected_company:
+            clear_vectorstore_cache(st.session_state.selected_company)
         st.session_state.selected_company = company
         st.session_state.upload_success_message = None
-        # Clear cached data for memory efficiency
-        if hasattr(st.session_state, 'current_vectorstore'):
-            del st.session_state.current_vectorstore
         st.rerun()
 
 def handle_file_upload(company, uploaded_file):
@@ -165,8 +151,6 @@ def relearn_pdfs(company):
         
         with st.spinner("🔄 Rebuilding knowledge base..."):
             vectorstore_path = os.path.join(VECTORSTORE_ROOT, company)
-            
-            # Clear all caches first
             clear_vectorstore_cache(company)
             
             if os.path.exists(vectorstore_path):
@@ -219,9 +203,6 @@ def delete_company_data(company):
             if not f.startswith(f"{company}_")
         }
         
-        # Clear logo cache
-        get_company_logo.clear()
-        
         st.success(f"✅ Deleted all data for {company}")
         st.session_state.selected_company = None
         st.rerun()
@@ -256,8 +237,6 @@ def render_sidebar():
                             logo_path = os.path.join(LOGOS_DIR, f"{new_company}.png")
                             with open(logo_path, "wb") as f:
                                 f.write(logo_file.getbuffer())
-                            # Clear logo cache to refresh
-                            get_company_logo.clear()
                         st.success(f"✅ Added company: {new_company}")
                         st.rerun()
                     else:
@@ -355,29 +334,10 @@ def render_main_content():
     if query:
         with st.spinner("🤖 Broker-GPT is analyzing your question..."):
             try:
-                # Use cached vectorstore
-                vectorstore = load_vectorstore(company)
-                
-                if vectorstore is None:
-                    st.error("❌ Could not load knowledge base. Please use admin access to click 'Relearn PDFs'.")
-                    return
-                
-                # Get relevant documents
-                retriever = vectorstore.as_retriever(search_kwargs={"k": 3})  # Limit to 3 docs for memory
+                vectorstore = get_vectorstore(company)
+                retriever = vectorstore.as_retriever()
                 docs = retriever.get_relevant_documents(query)
-                
-                # Limit context size for memory efficiency
-                context_parts = []
-                total_length = 0
-                max_context_length = 4000  # Limit context size
-                
-                for doc in docs:
-                    if total_length + len(doc.page_content) > max_context_length:
-                        break
-                    context_parts.append(doc.page_content)
-                    total_length += len(doc.page_content)
-                
-                context = "\n\n".join(context_parts)
+                context = "\n\n".join([doc.page_content for doc in docs])
 
                 # Gemini API call
                 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -410,12 +370,12 @@ Please provide a clear, professional response that would be helpful for insuranc
                         st.markdown("**Answer:**")
                         st.success(answer)
                         
-                        # Show source documents (limited for memory)
+                        # Show source documents
                         if docs:
                             with st.expander("📚 Source Documents"):
-                                for i, doc in enumerate(docs[:2]):  # Show only 2 docs
+                                for i, doc in enumerate(docs[:3]):
                                     st.markdown(f"**Source {i+1}:**")
-                                    st.text(doc.page_content[:300] + "...")  # Shorter preview
+                                    st.text(doc.page_content[:500] + "...")
                                     st.markdown("---")
                                     
                     except Exception as e:
@@ -448,7 +408,7 @@ def main():
     st.markdown("---")
     st.markdown(
         "<div style='text-align: center; color: gray;'>"
-        "🤖 Broker-GPT | Powered by AI | Version 7.0.6 | 2025"
+        "🤖 Broker-GPT | Powered by AI | Version 7.0.5 | 2025"
         "</div>", 
         unsafe_allow_html=True
     )
