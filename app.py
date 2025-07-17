@@ -689,7 +689,7 @@ Instructions:
                                 if 'content' not in candidate or 'parts' not in candidate['content']:
                                     st.error("❌ Invalid response structure from Gemini")
                                     st.json(response_data)
-                                    return
+                                    st.stop()
                                 
                                 answer = candidate['content']['parts'][0]['text']
                                 st.markdown("### 🤖 Broker-GPT Response")
