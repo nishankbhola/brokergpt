@@ -1,186 +1,126 @@
 import os
 import time
 import shutil
-import sqlite3
 import streamlit as st
-from langchain.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
-from langchain.embeddings import SentenceTransformerEmbeddings
+from langchain_community.embeddings import SentenceTransformerEmbeddings
 
+# This is a workaround for Streamlit Cloud's environment
 __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
-# --- NEW: Cached function to load the embedding model ---
+# --- Cached function to load the embedding model ---
+# This ensures the large model is loaded into memory only once.
 @st.cache_resource
 def load_embedding_model():
     """Loads the sentence transformer model only once."""
+    print("Loading embedding model for ingestion...")
     return SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
-# Helper to detect cloud
-def is_streamlit_cloud():
-    return os.environ.get("HOME") == "/home/adminuser"
-
 def clean_vectorstore_directory(persist_directory):
-    """Clean up vectorstore directory completely with better error handling"""
+    """Robustly removes the existing vectorstore directory."""
     if os.path.exists(persist_directory):
+        print(f"🧹 Cleaning up old vectorstore directory: {persist_directory}")
         try:
-            # Force close any open database connections
-            for root, dirs, files in os.walk(persist_directory):
-                for file in files:
-                    if file.endswith('.sqlite3') or file.endswith('.db'):
-                        db_path = os.path.join(root, file)
-                        try:
-                            # Try to close any open connections
-                            conn = sqlite3.connect(db_path)
-                            conn.close()
-                        except:
-                            pass
-            
-            # Wait a bit for connections to close
-            time.sleep(1)
-            
-            # Remove the directory
             shutil.rmtree(persist_directory)
-            print(f"🧹 Cleaned up directory: {persist_directory}")
-        except Exception as e:
-            print(f"⚠️ Error cleaning directory: {e}")
-            # If we can't remove it, try to remove just the db files
-            try:
-                for root, dirs, files in os.walk(persist_directory):
-                    for file in files:
-                        if file.endswith('.sqlite3') or file.endswith('.db'):
-                            os.remove(os.path.join(root, file))
-                print("🧹 Cleaned up database files")
-            except:
-                pass
+            time.sleep(1) # Give a moment for the filesystem to catch up
+        except OSError as e:
+            print(f"⚠️ Error cleaning directory: {e}. Retrying...")
+            # A simple retry can often solve filesystem lock issues
+            time.sleep(2)
+            shutil.rmtree(persist_directory, ignore_errors=True)
     
-    # Ensure directory exists
+    # Ensure the directory exists for the new store
     os.makedirs(persist_directory, exist_ok=True)
 
-def ingest_company_pdfs(company_name: str, persist_directory: str = None):
+def ingest_company_pdfs(company_name: str, persist_directory: str):
+    """
+    Ingests all PDF documents for a specific company into a persistent Chroma vector store.
+    """
     pdf_folder = os.path.join("data/pdfs", company_name)
+    print(f"🚀 Starting ingestion for company: {company_name}")
+    print(f"📂 PDF source folder: {pdf_folder}")
+    print(f"💾 Vectorstore destination: {persist_directory}")
 
-    # Always use a safe directory if none is passed
-    if persist_directory is None:
-        base_path = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-        persist_directory = os.path.join(base_path, company_name)
-
-    print("🗂️ Using vectorstore path:", persist_directory)
-
-    # Check if PDF folder exists and has PDFs
     if not os.path.exists(pdf_folder):
-        raise ValueError(f"PDF folder not found: {pdf_folder}")
+        raise FileNotFoundError(f"PDF source folder not found: {pdf_folder}")
     
-    pdf_files = [f for f in os.listdir(pdf_folder) if f.endswith(".pdf")]
+    pdf_files = [f for f in os.listdir(pdf_folder) if f.lower().endswith(".pdf")]
     if not pdf_files:
-        raise ValueError(f"No PDF files found in: {pdf_folder}")
+        raise ValueError(f"No PDF files found in {pdf_folder}. Please upload documents first.")
 
-    print(f"📄 Found {len(pdf_files)} PDF files")
+    print(f"📄 Found {len(pdf_files)} PDF files to process.")
 
-    # Clean up old vectorstore completely
-    clean_vectorstore_directory(persist_directory)
-
-    # Load and process PDFs
+    # Load and process all PDFs into document chunks
     all_chunks = []
     for filename in pdf_files:
-        print(f"📖 Processing: {filename}")
         file_path = os.path.join(pdf_folder, filename)
-        
+        print(f"  -> Processing: {filename}")
         try:
             loader = PyPDFLoader(file_path)
-            pages = loader.load()
+            documents = loader.load()
             
-            if not pages:
-                print(f"⚠️ No pages found in {filename}")
-                continue
-                
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000, 
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=1200, 
                 chunk_overlap=200,
                 length_function=len
             )
-            chunks = splitter.split_documents(pages)
-            
-            if chunks:
-                all_chunks.extend(chunks)
-                print(f"✅ Added {len(chunks)} chunks from {filename}")
-            else:
-                print(f"⚠️ No chunks created from {filename}")
-                
+            chunks = text_splitter.split_documents(documents)
+            all_chunks.extend(chunks)
+            print(f"     ✅ Created {len(chunks)} chunks.")
         except Exception as e:
-            print(f"❌ Error processing {filename}: {e}")
+            print(f"     ❌ Error processing {filename}: {e}")
             continue
 
     if not all_chunks:
-        raise ValueError("No chunks were created from any PDF files")
+        raise ValueError("Failed to create any text chunks from the PDF files.")
 
-    print(f"📊 Total chunks to process: {len(all_chunks)}")
+    print(f"📊 Total chunks created: {len(all_chunks)}")
 
-    # --- MODIFIED: Create embeddings using the cached function ---
+    # Get the cached embedding model
     print("🧠 Loading embedding model...")
     embeddings = load_embedding_model()
     print("✅ Embedding model loaded.")
 
-    # Create vectorstore with enhanced retry logic
-    max_retries = 5
-    for attempt in range(max_retries):
-        try:
-            print(f"🔄 Creating vectorstore (attempt {attempt + 1}/{max_retries})")
-            
-            # Extra cleanup on retry attempts
-            if attempt > 0:
-                clean_vectorstore_directory(persist_directory)
-                time.sleep(2)  # Wait longer on retries
-            
-            # Create vectorstore with explicit settings
-            vectordb = Chroma.from_documents(
-                documents=all_chunks,
-                embedding=embeddings,
-                persist_directory=persist_directory,
-                client_settings=None  # Use default settings
-            )
-            
-            # Test the vectorstore immediately
-            print("🔍 Testing vectorstore connection...")
-            vectordb._client.heartbeat()
-            
-            # Do a quick search test
-            test_results = vectordb.similarity_search("test", k=1)
-            print(f"🔍 Vectorstore test: {len(test_results)} results found")
-            
-            # Persist the vectorstore
-            print("💾 Persisting vectorstore...")
-            vectordb.persist()
-            
-            # Final verification
-            print("✅ Final verification...")
-            vectordb._client.heartbeat()
-            
-            print(f"✅ Successfully created vectorstore for {company_name}")
-            print(f"📈 Ingested {len(all_chunks)} chunks")
-            
-            return vectordb
-            
-        except Exception as e:
-            print(f"❌ Attempt {attempt + 1} failed: {e}")
-            
-            # Check if it's the specific tenants table error
-            if "no such table: tenants" in str(e):
-                print("🔧 Detected tenants table error - doing deep cleanup...")
-                # Force remove everything and wait longer
-                clean_vectorstore_directory(persist_directory)
-                time.sleep(3)
-            
-            if attempt < max_retries - 1:
-                print(f"⏳ Waiting {2 * (attempt + 1)} seconds before retry...")
-                time.sleep(2 * (attempt + 1))  # Exponential backoff
-            else:
-                print("❌ All attempts failed")
-                raise e
+    # Clean the target directory before creating the new vector store
+    clean_vectorstore_directory(persist_directory)
+
+    # Create and persist the Chroma vector store
+    print("✨ Creating new vector store...")
+    try:
+        vectordb = Chroma.from_documents(
+            documents=all_chunks,
+            embedding=embeddings,
+            persist_directory=persist_directory
+        )
+        print("💾 Persisting vector store to disk...")
+        vectordb.persist()
+        print(f"🎉 Ingestion complete for {company_name}!")
+        return vectordb
+    except Exception as e:
+        print(f"❌❌ Critical error during vector store creation: {e}")
+        raise
 
 if __name__ == "__main__":
-    # Test function
-    company_name = "test_company"
-    ingest_company_pdfs(company_name)
+    # Example of how to run this script directly for testing
+    print("Running ingestion script in standalone mode for testing.")
+    
+    # Create dummy data for testing
+    TEST_COMPANY = "test_company"
+    TEST_PDF_DIR = os.path.join("data/pdfs", TEST_COMPANY)
+    TEST_VS_DIR = os.path.join("vectorstores", TEST_COMPANY)
+    
+    if not os.path.exists(TEST_PDF_DIR):
+        os.makedirs(TEST_PDF_DIR)
+        # You would need to place a test PDF file in this directory
+        print(f"Created test directory: {TEST_PDF_DIR}")
+        print("Please add a PDF to the test directory to run a full test.")
+    
+    try:
+        ingest_company_pdfs(company_name=TEST_COMPANY, persist_directory=TEST_VS_DIR)
+    except (ValueError, FileNotFoundError) as e:
+        print(f"Could not run test: {e}")
+
