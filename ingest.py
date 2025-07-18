@@ -2,6 +2,7 @@ import os
 import time
 import shutil
 import sqlite3
+import streamlit as st
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
@@ -10,6 +11,12 @@ from langchain.embeddings import SentenceTransformerEmbeddings
 __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
+# --- NEW: Cached function to load the embedding model ---
+@st.cache_resource
+def load_embedding_model():
+    """Loads the sentence transformer model only once."""
+    return SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
 # Helper to detect cloud
 def is_streamlit_cloud():
@@ -111,8 +118,10 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
 
     print(f"📊 Total chunks to process: {len(all_chunks)}")
 
-    # Create embeddings
-    embeddings = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+    # --- MODIFIED: Create embeddings using the cached function ---
+    print("🧠 Loading embedding model...")
+    embeddings = load_embedding_model()
+    print("✅ Embedding model loaded.")
 
     # Create vectorstore with enhanced retry logic
     max_retries = 5
