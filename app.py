@@ -38,7 +38,7 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
             
         except Exception as e:
             if attempt < max_retries - 1:
-                wait_time = 2 * (attempt + 1)  # Exponential backoff
+                wait_time = 2 * (attempt + 1)
                 time.sleep(wait_time)
                 
                 # More aggressive cleanup on retry
@@ -70,8 +70,6 @@ def display_company_with_logo(company_name, size=50):
         col1, col2 = st.columns([1, 4])
         with col1:
             st.image(logo, width=size)
-        #with col2:
-            #st.markdown(f"**{company_name}**")
     else:
         st.markdown(f"🏢 **{company_name}**")
 
@@ -107,7 +105,6 @@ def get_company_vectorstore(company_name, vectorstore_path):
     """Get or create company-specific vectorstore with proper caching"""
     vectorstore_key = f'vectorstore_{company_name}'
     
-    # Check if we have a cached vectorstore for this specific company
     if vectorstore_key not in st.session_state:
         st.session_state[vectorstore_key] = create_chroma_vectorstore(vectorstore_path, company_name)
     
@@ -146,12 +143,6 @@ st.markdown("""
     .main-header {
         color: white;
         text-align: center;
-        /*background: linear-gradient(90deg, #1e3c72, #2a5298);
-        
-        padding: 0.1rem;
-        border-radius: 1px;
-        margin-bottom: 0.1rem;
-        */
     }
     .company-card {
         background: white;
@@ -222,7 +213,6 @@ with st.sidebar:
     if st.button("🔐 Admin Access"):
         st.session_state.admin_authenticated = False
 
-    
     if check_admin_password():
         st.markdown('<div class="success-zone">', unsafe_allow_html=True)
         st.success("🔓 Admin Mode Active")
@@ -252,7 +242,6 @@ with st.sidebar:
         
         st.markdown('</div>', unsafe_allow_html=True)
 
-    
     # Company selection
     st.markdown("---")
     st.markdown("### 📁 Select Company")
@@ -274,7 +263,6 @@ with st.sidebar:
                     clear_company_vectorstore_cache(st.session_state.selected_company)
                 
                 st.session_state.selected_company = company
-                # Clear upload success message when switching companies
                 st.session_state.upload_success_message = None
                 st.rerun()
         
@@ -300,14 +288,14 @@ with st.sidebar:
                 for pdf in current_pdfs:
                     st.markdown(f"• {pdf}")
             
-            # File uploader with unique key to prevent conflicts
+            # File uploader
             uploaded_pdf = st.file_uploader(
                 f"Upload PDF to {selected_company}:", 
                 type="pdf", 
                 key=f"pdf_uploader_{selected_company}"
             )
             
-            # Handle file upload without immediate rerun
+            # Handle file upload
             if uploaded_pdf:
                 file_id = f"{selected_company}_{uploaded_pdf.name}_{uploaded_pdf.size}"
                 
@@ -318,20 +306,17 @@ with st.sidebar:
                         with open(save_path, "wb") as f:
                             f.write(uploaded_pdf.getbuffer())
                         
-                        # Mark this file as processed
                         st.session_state.processed_files.add(file_id)
                         st.session_state.upload_success_message = f"✅ Uploaded: {uploaded_pdf.name}"
                         
-                        # Small delay to ensure file is written
                         time.sleep(0.1)
                         
                     except Exception as e:
                         st.error(f"❌ Error uploading file: {str(e)}")
             
-            # Display upload success message if exists
+            # Display upload success message
             if st.session_state.upload_success_message:
                 st.success(st.session_state.upload_success_message)
-                # Clear message after displaying
                 if st.button("✅ Continue", key="clear_upload_msg"):
                     st.session_state.upload_success_message = None
                     st.rerun()
@@ -339,7 +324,7 @@ with st.sidebar:
             st.markdown("---")
             st.markdown("### ⚙️ Admin Actions")
             
-            # Enhanced Relearn PDFs with better error handling
+            # Enhanced Relearn PDFs
             if st.button("🔄 Relearn PDFs"):
                 try:
                     from ingest import ingest_company_pdfs
@@ -348,18 +333,17 @@ with st.sidebar:
                         VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
                         vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
                         
-                        # Clear the cached vectorstore FIRST
+                        # Clear the cached vectorstore
                         clear_company_vectorstore_cache(selected_company)
                         
-                        # Remove existing vectorstore with better error handling
+                        # Remove existing vectorstore
                         if os.path.exists(vectorstore_path):
                             try:
                                 shutil.rmtree(vectorstore_path, ignore_errors=True)
-                                time.sleep(2)  # Wait for cleanup
+                                time.sleep(2)
                             except Exception as cleanup_error:
                                 st.warning(f"⚠️ Cleanup warning: {cleanup_error}")
                         
-                        # Ensure directory exists
                         os.makedirs(vectorstore_path, exist_ok=True)
                         
                         # Progress indicator
@@ -375,7 +359,6 @@ with st.sidebar:
                         progress_bar.progress(75)
                         status_text.text("✅ Finalizing...")
                         
-                        # Small delay to ensure everything is written
                         time.sleep(1)
                         
                         progress_bar.progress(100)
@@ -383,7 +366,6 @@ with st.sidebar:
                         
                         st.success("✅ Knowledge base updated successfully!")
                         
-                        # Clear progress indicators
                         time.sleep(1)
                         st.rerun()
                         
@@ -395,7 +377,6 @@ with st.sidebar:
                     else:
                         st.error(f"❌ Error: {error_msg}")
                     
-                    # Clear any cached data that might be causing issues
                     clear_company_vectorstore_cache(selected_company)
             
             # Delete company data
@@ -405,7 +386,7 @@ with st.sidebar:
             if st.button("🗑️ Delete All Company Data", type="secondary"):
                 if st.button("⚠️ CONFIRM DELETE", key="confirm_delete"):
                     try:
-                        # Clear vectorstore cache first
+                        # Clear vectorstore cache
                         clear_company_vectorstore_cache(selected_company)
                         
                         # Delete PDFs
@@ -424,7 +405,7 @@ with st.sidebar:
                         if os.path.exists(logo_path):
                             os.remove(logo_path)
                         
-                        # Clear processed files for this company
+                        # Clear processed files
                         st.session_state.processed_files = {
                             f for f in st.session_state.processed_files 
                             if not f.startswith(f"{selected_company}_")
@@ -540,7 +521,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                                 # Show source documents
                                 if docs:
                                     with st.expander("📚 Source Documents"):
-                                        for i, doc in enumerate(docs[:3]):  # Show top 3 sources
+                                        for i, doc in enumerate(docs[:3]):
                                             st.markdown(f"**Source {i+1}:**")
                                             st.text(doc.page_content[:500] + "...")
                                             st.markdown("---")
@@ -558,7 +539,6 @@ Please provide a clear, professional response that would be helpful for insuranc
                         else:
                             st.error(f"❌ Error accessing knowledge base: {error_msg}")
                             st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            # Clear the cached vectorstore for this company
                             clear_company_vectorstore_cache(selected_company)
     
     st.markdown("---")
@@ -571,8 +551,7 @@ Please provide a clear, professional response that would be helpful for insuranc
     with col2:
         if st.button("📊 Dashboard", key="nav_dashboard"):
             st.session_state.current_view = "Dashboard"
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+
 else:
     st.info("👆 Please select a company from the sidebar to continue.")
 
