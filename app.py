@@ -12,6 +12,12 @@ from dotenv import load_dotenv
 from langchain.vectorstores import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 
+# --- NEW: Cached function to load the embedding model ---
+@st.cache_resource
+def load_embedding_model():
+    """Loads the sentence transformer model only once."""
+    return SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+
 # Detect if running on Streamlit Cloud
 def is_streamlit_cloud():
     return os.environ.get("HOME") == "/home/adminuser"
@@ -27,9 +33,12 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
             
             os.makedirs(vectorstore_path, exist_ok=True)
             
+            # --- MODIFIED: Use the cached function to get the model ---
+            embedding_function = load_embedding_model()
+            
             vectorstore = Chroma(
                 persist_directory=vectorstore_path,
-                embedding_function=SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2"),
+                embedding_function=embedding_function,
                 client_settings=None
             )
             
