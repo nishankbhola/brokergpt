@@ -382,10 +382,11 @@ with st.sidebar:
                 except Exception as e:
                     error_msg = str(e)
                     if "no such table: tenants" in error_msg:
-                        st.error("❌ Database corruption detected. Please try again - this usually resolves the issue.")
-                        st.info("💡 If the problem persists, try deleting and re-adding the company data.")
-                    else:
-                        st.error(f"❌ Error: {error_msg}")
+                        st.error("❌ Database corruption detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
+                            
+                            clear_company_vectorstore_cache(selected_company)
+                        else:
+                            st.error(f"❌ Error: {error_msg}")
                     
                     clear_company_vectorstore_cache(selected_company)
             
@@ -434,7 +435,7 @@ with st.sidebar:
 
 # Add a radio button for view selection (Ask Questions or General Chat)
 view_options = ("Ask Questions", "General Chat")
-initial_index = view_options.index(st.session_state.current_view)
+initial_index = view_options.index(st.session_state.current_view) if st.session_state.current_view in view_options else 0
 view_option = st.sidebar.radio("Select View", view_options, index=initial_index)
 st.session_state.current_view = view_option
 
@@ -470,10 +471,14 @@ if st.session_state.current_view == "General Chat":
                         
                         retriever = vectorstore.as_retriever()
                         docs = retriever.get_relevant_documents(general_query)
-                        context = """
-
-"""
                         
+                        # Format context with separators
+                        context = "
+
+---
+
+".join([doc.page_content for doc in docs])
+
                         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
@@ -528,177 +533,3 @@ Please provide a clear, professional response that would be helpful for insuranc
                                 st.error("❌ Error parsing response from Gemini")
                         else:
                             st.error(f"❌ Gemini API Error: {response.status_code}")
-                            
-                    except Exception as e:
-                        error_msg = str(e)
-                        if "no such table: tenants" in error_msg:
-                            st.error("❌ Database error detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            clear_company_vectorstore_cache(company)
-                        else:
-                            st.error(f"❌ Error accessing knowledge base: {error_msg}")
-                            st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            clear_company_vectorstore_cache(company)
-                else:
-                    st.warning(f"⚠️ Knowledge base not found for {company}.")
-                st.markdown("---")
-
-elif st.session_state.selected_company:
-    selected_company = st.session_state.selected_company
-
-    # Path handling
-    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-    vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
-    
-    if not os.path.exists(vectorstore_path):
-        st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.") 
-    else:
-        if st.session_state.current_view == "Dashboard":
-            st.markdown("---")
-            st.subheader("📊 Company Dashboard")
-            
-            # Metrics
-            col1, col2, col3 = st.columns(3)
-            
-            uploaded_pdfs = get_uploaded_pdfs(selected_company)
-            pdf_count = len(uploaded_pdfs)
-            db_exists = os.path.exists(vectorstore_path)
-            
-            with col1:
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.metric("📄 PDF Files", pdf_count)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                st.metric("💾 Knowledge Base", "Ready" if db_exists else "Not Ready")
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            with col3:
-                if db_exists:
-                    total_size = sum(
-                        os.path.getsize(os.path.join(dp, f))
-                        for dp, dn, filenames in os.walk(vectorstore_path)
-                        for f in filenames
-                    )
-                    size_mb = round(total_size / 1024 / 1024, 2)
-                    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-                    st.metric("💽 DB Size", f"{size_mb} MB")
-                    st.markdown('</div>', unsafe_allow_html=True)
-            
-            # PDF List
-            if uploaded_pdfs:
-                st.markdown("#### 📄 Uploaded Documents")
-                for pdf in uploaded_pdfs:
-                    st.markdown(f"• {pdf}")
-        
-        else:  # Ask Questions view
-            st.markdown("---")
-            display_company_with_logo(selected_company, size=150)
-            st.subheader(f"💬 Ask {selected_company} Questions") 
-            
-            query = st.text_input("🔍 Enter your question:", placeholder="Ask me anything about underwriting...")
-            
-            if query:
-                with st.spinner("🤖 Broker-GPT is analyzing your question..."):
-                    try:
-                        # Get company-specific vectorstore
-                        vectorstore = get_company_vectorstore(selected_company, vectorstore_path)
-                        
-                        retriever = vectorstore.as_retriever()
-                        docs = retriever.get_relevant_documents(query)
-                        context = """
-
-"""
-
-                        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-
-                        payload = {
-                            "contents": [{
-                                "parts": [{
-                                    "text": f"""As a professional insurance broker assistant, answer the following question using ONLY the context provided for {selected_company}.
-
-Question: {query}
-
-Context from {selected_company}: {context}
-
-Please provide a clear, professional response that would be helpful for insurance brokers and their clients. Base your answer ONLY on the provided context from {selected_company}.
-"""
-                                }]
-                            }]
-                        }
-
-                        headers = {"Content-Type": "application/json"}
-                        response = requests.post(url, headers=headers, data=json.dumps(payload))
-
-                        st.markdown("---")
-                        if response.status_code == 200:
-                            try:
-                                answer = response.json()['candidates'][0]['content']['parts'][0]['text']
-                                st.markdown("### 🤖 Broker-GPT Response")
-                                st.markdown(f"**Company:** {selected_company}")
-                                st.markdown(f"**Question:** {query}")
-                                st.markdown("**Answer:**")
-                                st.success(answer)
-                                
-                                # Show source documents with download links
-                                if docs:
-                                    with st.expander("📚 Source Documents"):
-                                        for i, doc in enumerate(docs[:3]):
-                                            st.markdown(f"**Source {i+1}:**")
-                                            st.text(doc.page_content[:500] + "...")
-                                            
-                                            # Add download link if source information is available
-                                            if 'source' in doc.metadata:
-                                                source_file = doc.metadata['source']
-                                                # Assuming the source metadata contains the full path within the data/pdfs structure
-                                                # You might need to adjust this path based on how your source metadata is stored
-                                                file_path = source_file
-                                                if os.path.exists(file_path):
-                                                     with open(file_path, "rb") as f:
-                                                        st.download_button(
-                                                            label=f"Download {os.path.basename(source_file)}",
-                                                            data=f,
-                                                            file_name=os.path.basename(source_file),
-                                                            mime="application/pdf",
-                                                            key=f"download_{selected_company}_{i}"
-                                                        )
-                                            st.markdown("---")
-                                            
-                            except Exception as e:
-                                st.error("❌ Error parsing response from Gemini")
-                        else:
-                            st.error(f"❌ Gemini API Error: {response.status_code}")
-                            
-                    except Exception as e:
-                        error_msg = str(e)
-                        if "no such table: tenants" in error_msg:
-                            st.error("❌ Database error detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            clear_company_vectorstore_cache(selected_company)
-                        else:
-                            st.error(f"❌ Error accessing knowledge base: {error_msg}")
-                            st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            clear_company_vectorstore_cache(selected_company)
-    
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🔍 Ask Questions", key="nav_questions"):
-            st.session_state.current_view = "Ask Questions"
-    
-    with col2:
-        if st.button("📊 Dashboard", key="nav_dashboard"):
-            st.session_state.current_view = "Dashboard"
-
-else:
-    st.info("👆 Please select a company from the sidebar to continue.")
-
-# Footer
-st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 7.0.5 | 2025"
-    "</div>", 
-    unsafe_allow_html=True
-)
