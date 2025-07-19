@@ -469,8 +469,8 @@ if st.session_state.current_view == "General Chat":
                         docs = retriever.get_relevant_documents(general_query)
                         context = """
 
-""".join([doc.page_content for doc in docs])
-
+"""
+                        
                         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
@@ -497,12 +497,26 @@ Please provide a clear, professional response that would be helpful for insuranc
                                 answer = response.json()['candidates'][0]['content']['parts'][0]['text']
                                 st.success(answer)
                                 
-                                # Show source documents
+                                # Show source documents with download links
                                 if docs:
                                     with st.expander("📚 Source Documents"):
                                         for i, doc in enumerate(docs[:3]):
                                             st.markdown(f"**Source {i+1}:**")
                                             st.text(doc.page_content[:500] + "...")
+                                            
+                                            # Add download link if source information is available
+                                            if 'source' in doc.metadata:
+                                                source_file = doc.metadata['source']
+                                                file_path = os.path.join("data/pdfs", company, os.path.basename(source_file))
+                                                if os.path.exists(file_path):
+                                                    with open(file_path, "rb") as f:
+                                                        st.download_button(
+                                                            label=f"Download {os.path.basename(source_file)}",
+                                                            data=f,
+                                                            file_name=os.path.basename(source_file),
+                                                            mime="application/pdf",
+                                                            key=f"download_{company}_{i}"
+                                                        )
                                             st.markdown("---")
                                             
                             except Exception as e:
@@ -622,12 +636,28 @@ Please provide a clear, professional response that would be helpful for insuranc
                                 st.markdown("**Answer:**")
                                 st.success(answer)
                                 
-                                # Show source documents
+                                # Show source documents with download links
                                 if docs:
                                     with st.expander("📚 Source Documents"):
                                         for i, doc in enumerate(docs[:3]):
                                             st.markdown(f"**Source {i+1}:**")
                                             st.text(doc.page_content[:500] + "...")
+                                            
+                                            # Add download link if source information is available
+                                            if 'source' in doc.metadata:
+                                                source_file = doc.metadata['source']
+                                                # Assuming the source metadata contains the full path within the data/pdfs structure
+                                                # You might need to adjust this path based on how your source metadata is stored
+                                                file_path = source_file
+                                                if os.path.exists(file_path):
+                                                     with open(file_path, "rb") as f:
+                                                        st.download_button(
+                                                            label=f"Download {os.path.basename(source_file)}",
+                                                            data=f,
+                                                            file_name=os.path.basename(source_file),
+                                                            mime="application/pdf",
+                                                            key=f"download_{selected_company}_{i}"
+                                                        )
                                             st.markdown("---")
                                             
                             except Exception as e:
