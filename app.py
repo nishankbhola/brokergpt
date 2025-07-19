@@ -263,11 +263,10 @@ with st.sidebar:
     st.header("🏢 Company Management")
     
     # Admin section
-    # Admin section with unique button keys
     st.markdown("### 🔧 Admin Controls")
     if st.button("🔐 Admin Access"):
         st.session_state.admin_authenticated = False
-    
+
     if check_admin_password():
         st.markdown('<div class="success-zone">', unsafe_allow_html=True)
         st.success("🔓 Admin Mode Active")
@@ -296,22 +295,41 @@ with st.sidebar:
                     st.warning("⚠️ Company already exists")
         
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # Company selection
+    st.markdown("---")
+    st.markdown("### 📁 Select Company")
     
-    # Navigation buttons at bottom (also need unique keys)
-    # These should be added to the main content area where you have:
-    # st.markdown("---")
-    # col1, col2 = st.columns(2)
-    # 
-    # with col1:
-    #     if st.button("🔍 Ask Questions", key=f"nav_questions_{selected_company}"):
-    #         st.session_state.current_view = "Ask Questions"
-    #
-    # with col2:
-    #     if st.button("📊 Dashboard", key=f"nav_dashboard_{selected_company}"):
-    #         st.session_state.current_view = "Dashboard"
+    company_folders = [f for f in os.listdir(company_base_dir) 
+                      if os.path.isdir(os.path.join(company_base_dir, f))]
     
-        # Admin controls for selected company (when company is selected)
-        if st.session_state.selected_company:
+    if not company_folders:
+        st.warning("⚠️ No companies found. Add one to begin.")
+        st.stop()
+    
+    # Display companies with logos
+    for company in company_folders:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if st.button(f"📂 {company}", key=f"select_{company}"):
+                # Clear vectorstore cache when switching companies
+                if st.session_state.selected_company and st.session_state.selected_company != company:
+                    clear_company_vectorstore_cache(st.session_state.selected_company)
+                
+                st.session_state.selected_company = company
+                st.session_state.upload_success_message = None
+                st.rerun()
+        
+        with col2:
+            logo = get_company_logo(company)
+            if logo:
+                st.image(logo, width=30)
+    
+    if st.session_state.selected_company:
+        
+        # Admin controls for selected company
+        if st.session_state.get('admin_authenticated', False):
+
             st.markdown("---")
             st.markdown("### 📄 Upload PDFs")
             
@@ -353,15 +371,15 @@ with st.sidebar:
             # Display upload success message
             if st.session_state.upload_success_message:
                 st.success(st.session_state.upload_success_message)
-                if st.button("✅ Continue", key=f"clear_upload_msg_{selected_company}"):
+                if st.button("✅ Continue", key="clear_upload_msg"):
                     st.session_state.upload_success_message = None
                     st.rerun()
             
             st.markdown("---")
             st.markdown("### ⚙️ Admin Actions")
             
-            # Enhanced Relearn PDFs with unique key
-            if st.button("🔄 Relearn PDFs", key=f"relearn_pdfs_{selected_company}"):
+            # Enhanced Relearn PDFs
+            if st.button("🔄 Relearn PDFs"):
                 try:
                     from ingest import ingest_company_pdfs
                     
@@ -415,20 +433,12 @@ with st.sidebar:
                     
                     clear_company_vectorstore_cache(selected_company)
             
-            # Delete company data with unique keys
+            # Delete company data
             st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
             st.markdown("#### 🗑️ Danger Zone")
             
-            if st.button("🗑️ Delete All Company Data", type="secondary", key=f"delete_company_{selected_company}"):
-                # Use session state to track confirmation
-                if f"confirm_delete_{selected_company}" not in st.session_state:
-                    st.session_state[f"confirm_delete_{selected_company}"] = True
-                    st.warning("⚠️ Click the CONFIRM DELETE button below to proceed")
-                    st.rerun()
-            
-            # Show confirm button if delete was clicked
-            if st.session_state.get(f"confirm_delete_{selected_company}", False):
-                if st.button("⚠️ CONFIRM DELETE", key=f"confirm_delete_final_{selected_company}", type="primary"):
+            if st.button("🗑️ Delete All Company Data", type="secondary"):
+                if st.button("⚠️ CONFIRM DELETE", key="confirm_delete"):
                     try:
                         # Clear vectorstore cache
                         clear_company_vectorstore_cache(selected_company)
@@ -455,20 +465,12 @@ with st.sidebar:
                             if not f.startswith(f"{selected_company}_")
                         }
                         
-                        # Clear confirmation state
-                        if f"confirm_delete_{selected_company}" in st.session_state:
-                            del st.session_state[f"confirm_delete_{selected_company}"]
-                        
                         st.success(f"✅ Deleted all data for {selected_company}")
                         st.session_state.selected_company = None
                         st.rerun()
                         
                     except Exception as e:
                         st.error(f"❌ Error deleting: {str(e)}")
-                
-                if st.button("❌ Cancel", key=f"cancel_delete_{selected_company}"):
-                    del st.session_state[f"confirm_delete_{selected_company}"]
-                    st.rerun()
             
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -719,11 +721,11 @@ Please provide a clear, professional response that would be helpful for insuranc
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔍 Ask Questions", key=f"nav_questions_{selected_company}"):
+        if st.button("🔍 Ask Questions", key="nav_questions"):
             st.session_state.current_view = "Ask Questions"
-
+    
     with col2:
-        if st.button("📊 Dashboard", key=f"nav_dashboard_{selected_company}"):
+        if st.button("📊 Dashboard", key="nav_dashboard"):
             st.session_state.current_view = "Dashboard"
 
 else:
@@ -733,7 +735,7 @@ else:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 18.0.5 | 2025"
+    "🤖 Broker-GPT | Powered by AI | Version 16.0.5 | 2025"
     "</div>", 
     unsafe_allow_html=True
 )
