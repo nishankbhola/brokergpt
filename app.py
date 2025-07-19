@@ -133,7 +133,7 @@ load_dotenv()
 if 'selected_company' not in st.session_state:
     st.session_state.selected_company = None
 if 'current_view' not in st.session_state:
-    st.session_state.current_view = "Ask Questions"
+    st.session_state.current_view = "General Chat"
 if 'upload_success_message' not in st.session_state:
     st.session_state.upload_success_message = None
 if 'processed_files' not in st.session_state:
@@ -273,6 +273,7 @@ with st.sidebar:
                 
                 st.session_state.selected_company = company
                 st.session_state.upload_success_message = None
+                st.session_state.current_view = "Ask Questions" # Set view to Ask Questions
                 st.rerun()
         
         with col2:
@@ -432,7 +433,9 @@ with st.sidebar:
 # Main content area
 
 # Add a radio button for view selection (Ask Questions or General Chat)
-view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat"))
+view_options = ("Ask Questions", "General Chat")
+initial_index = view_options.index(st.session_state.current_view)
+view_option = st.sidebar.radio("Select View", view_options, index=initial_index)
 st.session_state.current_view = view_option
 
 
@@ -507,9 +510,11 @@ Please provide a clear, professional response that would be helpful for insuranc
                                             # Add download link if source information is available
                                             if 'source' in doc.metadata:
                                                 source_file = doc.metadata['source']
-                                                file_path = os.path.join("data/pdfs", company, os.path.basename(source_file))
+                                                # Assuming the source metadata contains the full path within the data/pdfs structure
+                                                # You might need to adjust this path based on how your source metadata is stored
+                                                file_path = source_file
                                                 if os.path.exists(file_path):
-                                                    with open(file_path, "rb") as f:
+                                                     with open(file_path, "rb") as f:
                                                         st.download_button(
                                                             label=f"Download {os.path.basename(source_file)}",
                                                             data=f,
@@ -603,7 +608,7 @@ elif st.session_state.selected_company:
                         docs = retriever.get_relevant_documents(query)
                         context = """
 
-""".join([doc.page_content for doc in docs])
+"""
 
                         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
