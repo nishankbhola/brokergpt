@@ -430,7 +430,27 @@ with st.sidebar:
             st.markdown('</div>', unsafe_allow_html=True)
 
 # Main content area
-if st.session_state.selected_company:
+
+# Add a radio button for view selection (Ask Questions or General Chat)
+view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat"))
+st.session_state.current_view = view_option
+
+
+
+
+if st.session_state.current_view == "General Chat":
+    st.markdown("---")
+    st.subheader("💬 General Chat (All Companies)")
+    
+    general_query = st.text_input("🔍 Enter your question for all companies:", placeholder="Ask a general question...")
+    
+    if general_query:
+        # This is where we will add the logic to query all companies and display responses
+        st.info("Fetching responses from all companies...")
+        # Placeholder for displaying results
+        st.write("Results will appear here company by company.")
+
+elif st.session_state.selected_company:
     selected_company = st.session_state.selected_company
 
     # Path handling
@@ -494,7 +514,9 @@ if st.session_state.selected_company:
                         
                         retriever = vectorstore.as_retriever()
                         docs = retriever.get_relevant_documents(query)
-                        context = "\n\n".join([doc.page_content for doc in docs])
+                        context = "
+
+".join([doc.page_content for doc in docs])
 
                         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
@@ -520,7 +542,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                         st.markdown("---")
                         if response.status_code == 200:
                             try:
-                                answer = response.json()['candidates'][0]['content']['parts'][0]['text']
+                                answer = response.json()['candidates'][0]['content']['parts'][0]'text']
                                 st.markdown("### 🤖 Broker-GPT Response")
                                 st.markdown(f"**Company:** {selected_company}")
                                 st.markdown(f"**Question:** {query}")
