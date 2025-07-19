@@ -264,213 +264,213 @@ with st.sidebar:
     
     # Admin section
     # Admin section with unique button keys
-st.markdown("### 🔧 Admin Controls")
-if st.button("🔐 Admin Access", key="admin_access_toggle"):
-    st.session_state.admin_authenticated = False
-
-if check_admin_password():
-    st.markdown('<div class="success-zone">', unsafe_allow_html=True)
-    st.success("🔓 Admin Mode Active")
+    st.markdown("### 🔧 Admin Controls")
+    if st.button("🔐 Admin Access", key="admin_access_toggle"):
+        st.session_state.admin_authenticated = False
     
-    # Add new company
-    st.markdown("#### ➕ Add New Company")
-    with st.form("add_company_form"):
-        new_company = st.text_input("Company Name:")
-        logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
-        add_submitted = st.form_submit_button("Add Company")
+    if check_admin_password():
+        st.markdown('<div class="success-zone">', unsafe_allow_html=True)
+        st.success("🔓 Admin Mode Active")
         
-        if add_submitted and new_company:
-            new_path = os.path.join(company_base_dir, new_company)
-            if not os.path.exists(new_path):
-                os.makedirs(new_path)
-                
-                # Save logo if uploaded
-                if logo_file is not None:
-                    logo_path = os.path.join(logos_dir, f"{new_company}.png")
-                    with open(logo_path, "wb") as f:
-                        f.write(logo_file.getbuffer())
-                
-                st.success(f"✅ Added company: {new_company}")
-                st.rerun()
-            else:
-                st.warning("⚠️ Company already exists")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# Navigation buttons at bottom (also need unique keys)
-# These should be added to the main content area where you have:
-# st.markdown("---")
-# col1, col2 = st.columns(2)
-# 
-# with col1:
-#     if st.button("🔍 Ask Questions", key=f"nav_questions_{selected_company}"):
-#         st.session_state.current_view = "Ask Questions"
-#
-# with col2:
-#     if st.button("📊 Dashboard", key=f"nav_dashboard_{selected_company}"):
-#         st.session_state.current_view = "Dashboard"
-
-    # Admin controls for selected company (when company is selected)
-    if st.session_state.selected_company:
-        st.markdown("---")
-        st.markdown("### 📄 Upload PDFs")
-        
-        selected_company = st.session_state.selected_company
-        
-        # Display current PDFs
-        current_pdfs = get_uploaded_pdfs(selected_company)
-        if current_pdfs:
-            st.markdown("**Current PDFs:**")
-            for pdf in current_pdfs:
-                st.markdown(f"• {pdf}")
-        
-        # File uploader
-        uploaded_pdf = st.file_uploader(
-            f"Upload PDF to {selected_company}:", 
-            type="pdf", 
-            key=f"pdf_uploader_{selected_company}"
-        )
-        
-        # Handle file upload
-        if uploaded_pdf:
-            file_id = f"{selected_company}_{uploaded_pdf.name}_{uploaded_pdf.size}"
+        # Add new company
+        st.markdown("#### ➕ Add New Company")
+        with st.form("add_company_form"):
+            new_company = st.text_input("Company Name:")
+            logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
+            add_submitted = st.form_submit_button("Add Company")
             
-            # Only process if this file hasn't been processed yet
-            if file_id not in st.session_state.processed_files:
-                try:
-                    save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
-                    with open(save_path, "wb") as f:
-                        f.write(uploaded_pdf.getbuffer())
+            if add_submitted and new_company:
+                new_path = os.path.join(company_base_dir, new_company)
+                if not os.path.exists(new_path):
+                    os.makedirs(new_path)
                     
-                    st.session_state.processed_files.add(file_id)
-                    st.session_state.upload_success_message = f"✅ Uploaded: {uploaded_pdf.name}"
+                    # Save logo if uploaded
+                    if logo_file is not None:
+                        logo_path = os.path.join(logos_dir, f"{new_company}.png")
+                        with open(logo_path, "wb") as f:
+                            f.write(logo_file.getbuffer())
                     
-                    time.sleep(0.1)
-                    
-                except Exception as e:
-                    st.error(f"❌ Error uploading file: {str(e)}")
-        
-        # Display upload success message
-        if st.session_state.upload_success_message:
-            st.success(st.session_state.upload_success_message)
-            if st.button("✅ Continue", key=f"clear_upload_msg_{selected_company}"):
-                st.session_state.upload_success_message = None
-                st.rerun()
-        
-        st.markdown("---")
-        st.markdown("### ⚙️ Admin Actions")
-        
-        # Enhanced Relearn PDFs with unique key
-        if st.button("🔄 Relearn PDFs", key=f"relearn_pdfs_{selected_company}"):
-            try:
-                from ingest import ingest_company_pdfs
-                
-                with st.spinner("🔄 Rebuilding knowledge base..."):
-                    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-                    vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
-                    
-                    # Clear the cached vectorstore
-                    clear_company_vectorstore_cache(selected_company)
-                    
-                    # Remove existing vectorstore
-                    if os.path.exists(vectorstore_path):
-                        try:
-                            shutil.rmtree(vectorstore_path, ignore_errors=True)
-                            time.sleep(2)
-                        except Exception as cleanup_error:
-                            st.warning(f"⚠️ Cleanup warning: {cleanup_error}")
-                    
-                    os.makedirs(vectorstore_path, exist_ok=True)
-                    
-                    # Progress indicator
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-                    
-                    status_text.text("📖 Processing PDFs...")
-                    progress_bar.progress(25)
-                    
-                    # Run the ingestion
-                    vectordb = ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
-                    
-                    progress_bar.progress(75)
-                    status_text.text("✅ Finalizing...")
-                    
-                    time.sleep(1)
-                    
-                    progress_bar.progress(100)
-                    status_text.text("🎉 Complete!")
-                    
-                    st.success("✅ Knowledge base updated successfully!")
-                    
-                    time.sleep(1)
+                    st.success(f"✅ Added company: {new_company}")
                     st.rerun()
-                    
-            except Exception as e:
-                error_msg = str(e)
-                if "no such table: tenants" in error_msg:
-                    st.error("❌ Database corruption detected. Please try again - this usually resolves the issue.")
-                    st.info("💡 If the problem persists, try deleting and re-adding the company data.")
                 else:
-                    st.error(f"❌ Error: {error_msg}")
-                
-                clear_company_vectorstore_cache(selected_company)
-        
-        # Delete company data with unique keys
-        st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
-        st.markdown("#### 🗑️ Danger Zone")
-        
-        if st.button("🗑️ Delete All Company Data", type="secondary", key=f"delete_company_{selected_company}"):
-            # Use session state to track confirmation
-            if f"confirm_delete_{selected_company}" not in st.session_state:
-                st.session_state[f"confirm_delete_{selected_company}"] = True
-                st.warning("⚠️ Click the CONFIRM DELETE button below to proceed")
-                st.rerun()
-        
-        # Show confirm button if delete was clicked
-        if st.session_state.get(f"confirm_delete_{selected_company}", False):
-            if st.button("⚠️ CONFIRM DELETE", key=f"confirm_delete_final_{selected_company}", type="primary"):
-                try:
-                    # Clear vectorstore cache
-                    clear_company_vectorstore_cache(selected_company)
-                    
-                    # Delete PDFs
-                    company_path = os.path.join(company_base_dir, selected_company)
-                    if os.path.exists(company_path):
-                        shutil.rmtree(company_path)
-                    
-                    # Delete vectorstore
-                    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-                    vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
-                    if os.path.exists(vectorstore_path):
-                        shutil.rmtree(vectorstore_path)
-                    
-                    # Delete logo
-                    logo_path = os.path.join(logos_dir, f"{selected_company}.png")
-                    if os.path.exists(logo_path):
-                        os.remove(logo_path)
-                    
-                    # Clear processed files
-                    st.session_state.processed_files = {
-                        f for f in st.session_state.processed_files 
-                        if not f.startswith(f"{selected_company}_")
-                    }
-                    
-                    # Clear confirmation state
-                    if f"confirm_delete_{selected_company}" in st.session_state:
-                        del st.session_state[f"confirm_delete_{selected_company}"]
-                    
-                    st.success(f"✅ Deleted all data for {selected_company}")
-                    st.session_state.selected_company = None
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error deleting: {str(e)}")
-            
-            if st.button("❌ Cancel", key=f"cancel_delete_{selected_company}"):
-                del st.session_state[f"confirm_delete_{selected_company}"]
-                st.rerun()
+                    st.warning("⚠️ Company already exists")
         
         st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Navigation buttons at bottom (also need unique keys)
+    # These should be added to the main content area where you have:
+    # st.markdown("---")
+    # col1, col2 = st.columns(2)
+    # 
+    # with col1:
+    #     if st.button("🔍 Ask Questions", key=f"nav_questions_{selected_company}"):
+    #         st.session_state.current_view = "Ask Questions"
+    #
+    # with col2:
+    #     if st.button("📊 Dashboard", key=f"nav_dashboard_{selected_company}"):
+    #         st.session_state.current_view = "Dashboard"
+    
+        # Admin controls for selected company (when company is selected)
+        if st.session_state.selected_company:
+            st.markdown("---")
+            st.markdown("### 📄 Upload PDFs")
+            
+            selected_company = st.session_state.selected_company
+            
+            # Display current PDFs
+            current_pdfs = get_uploaded_pdfs(selected_company)
+            if current_pdfs:
+                st.markdown("**Current PDFs:**")
+                for pdf in current_pdfs:
+                    st.markdown(f"• {pdf}")
+            
+            # File uploader
+            uploaded_pdf = st.file_uploader(
+                f"Upload PDF to {selected_company}:", 
+                type="pdf", 
+                key=f"pdf_uploader_{selected_company}"
+            )
+            
+            # Handle file upload
+            if uploaded_pdf:
+                file_id = f"{selected_company}_{uploaded_pdf.name}_{uploaded_pdf.size}"
+                
+                # Only process if this file hasn't been processed yet
+                if file_id not in st.session_state.processed_files:
+                    try:
+                        save_path = os.path.join(company_base_dir, selected_company, uploaded_pdf.name)
+                        with open(save_path, "wb") as f:
+                            f.write(uploaded_pdf.getbuffer())
+                        
+                        st.session_state.processed_files.add(file_id)
+                        st.session_state.upload_success_message = f"✅ Uploaded: {uploaded_pdf.name}"
+                        
+                        time.sleep(0.1)
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error uploading file: {str(e)}")
+            
+            # Display upload success message
+            if st.session_state.upload_success_message:
+                st.success(st.session_state.upload_success_message)
+                if st.button("✅ Continue", key=f"clear_upload_msg_{selected_company}"):
+                    st.session_state.upload_success_message = None
+                    st.rerun()
+            
+            st.markdown("---")
+            st.markdown("### ⚙️ Admin Actions")
+            
+            # Enhanced Relearn PDFs with unique key
+            if st.button("🔄 Relearn PDFs", key=f"relearn_pdfs_{selected_company}"):
+                try:
+                    from ingest import ingest_company_pdfs
+                    
+                    with st.spinner("🔄 Rebuilding knowledge base..."):
+                        VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+                        vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+                        
+                        # Clear the cached vectorstore
+                        clear_company_vectorstore_cache(selected_company)
+                        
+                        # Remove existing vectorstore
+                        if os.path.exists(vectorstore_path):
+                            try:
+                                shutil.rmtree(vectorstore_path, ignore_errors=True)
+                                time.sleep(2)
+                            except Exception as cleanup_error:
+                                st.warning(f"⚠️ Cleanup warning: {cleanup_error}")
+                        
+                        os.makedirs(vectorstore_path, exist_ok=True)
+                        
+                        # Progress indicator
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
+                        status_text.text("📖 Processing PDFs...")
+                        progress_bar.progress(25)
+                        
+                        # Run the ingestion
+                        vectordb = ingest_company_pdfs(selected_company, persist_directory=vectorstore_path)
+                        
+                        progress_bar.progress(75)
+                        status_text.text("✅ Finalizing...")
+                        
+                        time.sleep(1)
+                        
+                        progress_bar.progress(100)
+                        status_text.text("🎉 Complete!")
+                        
+                        st.success("✅ Knowledge base updated successfully!")
+                        
+                        time.sleep(1)
+                        st.rerun()
+                        
+                except Exception as e:
+                    error_msg = str(e)
+                    if "no such table: tenants" in error_msg:
+                        st.error("❌ Database corruption detected. Please try again - this usually resolves the issue.")
+                        st.info("💡 If the problem persists, try deleting and re-adding the company data.")
+                    else:
+                        st.error(f"❌ Error: {error_msg}")
+                    
+                    clear_company_vectorstore_cache(selected_company)
+            
+            # Delete company data with unique keys
+            st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
+            st.markdown("#### 🗑️ Danger Zone")
+            
+            if st.button("🗑️ Delete All Company Data", type="secondary", key=f"delete_company_{selected_company}"):
+                # Use session state to track confirmation
+                if f"confirm_delete_{selected_company}" not in st.session_state:
+                    st.session_state[f"confirm_delete_{selected_company}"] = True
+                    st.warning("⚠️ Click the CONFIRM DELETE button below to proceed")
+                    st.rerun()
+            
+            # Show confirm button if delete was clicked
+            if st.session_state.get(f"confirm_delete_{selected_company}", False):
+                if st.button("⚠️ CONFIRM DELETE", key=f"confirm_delete_final_{selected_company}", type="primary"):
+                    try:
+                        # Clear vectorstore cache
+                        clear_company_vectorstore_cache(selected_company)
+                        
+                        # Delete PDFs
+                        company_path = os.path.join(company_base_dir, selected_company)
+                        if os.path.exists(company_path):
+                            shutil.rmtree(company_path)
+                        
+                        # Delete vectorstore
+                        VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+                        vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
+                        if os.path.exists(vectorstore_path):
+                            shutil.rmtree(vectorstore_path)
+                        
+                        # Delete logo
+                        logo_path = os.path.join(logos_dir, f"{selected_company}.png")
+                        if os.path.exists(logo_path):
+                            os.remove(logo_path)
+                        
+                        # Clear processed files
+                        st.session_state.processed_files = {
+                            f for f in st.session_state.processed_files 
+                            if not f.startswith(f"{selected_company}_")
+                        }
+                        
+                        # Clear confirmation state
+                        if f"confirm_delete_{selected_company}" in st.session_state:
+                            del st.session_state[f"confirm_delete_{selected_company}"]
+                        
+                        st.success(f"✅ Deleted all data for {selected_company}")
+                        st.session_state.selected_company = None
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error deleting: {str(e)}")
+                
+                if st.button("❌ Cancel", key=f"cancel_delete_{selected_company}"):
+                    del st.session_state[f"confirm_delete_{selected_company}"]
+                    st.rerun()
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
 # Main content area
 
