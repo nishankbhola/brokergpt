@@ -99,9 +99,9 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
                 continue
                 
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000, 
-                chunk_overlap=200,
-                length_function=len
+            chunk_size=800, 
+            chunk_overlap=100,
+            length_function=len
             )
             chunks = splitter.split_documents(pages)
             
@@ -123,6 +123,10 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
         raise ValueError("No chunks were created from any PDF files")
 
     print(f"📊 Total chunks to process: {len(all_chunks)}")
+    max_chunks = 5000  # Adjust based on your needs
+    if len(all_chunks) > max_chunks:
+        print(f"⚠️ Limiting chunks from {len(all_chunks)} to {max_chunks} to prevent memory issues")
+        all_chunks = all_chunks[:max_chunks]
 
     # --- MODIFIED: Create embeddings using the cached function ---
     print("🧠 Loading embedding model...")
