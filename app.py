@@ -681,10 +681,12 @@ Please provide a clear, professional response that would be helpful for insuranc
     with col1:
         if st.button("🔍 Ask Questions", key="nav_questions"):
             st.session_state.current_view = "Ask Questions"
+            st.rerun()
     
     with col2:
         if st.button("📊 Dashboard", key="nav_dashboard"):
             st.session_state.current_view = "Dashboard"
+            st.rerun()
 
 else:
     st.info("👆 Please select a company from the sidebar to continue.")
