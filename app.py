@@ -514,9 +514,9 @@ elif st.session_state.selected_company:
                         
                         retriever = vectorstore.as_retriever()
                         docs = retriever.get_relevant_documents(query)
-                        context = "
+                        context = """
 
-".join([doc.page_content for doc in docs])
+""".join([doc.page_content for doc in docs])
 
                         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
@@ -542,7 +542,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                         st.markdown("---")
                         if response.status_code == 200:
                             try:
-                                answer = response.json()['candidates'][0]['content']['parts'][0]'text']
+                                answer = response.json()['candidates'][0]['content']['parts'][0]['text']
                                 st.markdown("### 🤖 Broker-GPT Response")
                                 st.markdown(f"**Company:** {selected_company}")
                                 st.markdown(f"**Question:** {query}")
@@ -590,7 +590,7 @@ else:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 9.0.5 | 2025"
+    "🤖 Broker-GPT | Powered by AI | Version 7.0.5 | 2025"
     "</div>", 
     unsafe_allow_html=True
 )
