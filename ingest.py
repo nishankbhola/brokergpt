@@ -3,22 +3,20 @@ import time
 import shutil
 import sqlite3
 import streamlit as st
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import SentenceTransformerEmbeddings
-from app import load_embedding_model
+from langchain.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import Chroma
+from langchain.embeddings import SentenceTransformerEmbeddings
 
 __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
-# ADD THIS FUNCTION - This is the missing function causing NameError
-def force_garbage_collection():
-    """Force garbage collection to free up memory"""
-    import gc
-    gc.collect()
-    print("🧹 Memory cleanup performed")
+# --- NEW: Cached function to load the embedding model ---
+@st.cache_resource
+def load_embedding_model():
+    """Loads the sentence transformer model only once."""
+    return SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
 
 # Helper to detect cloud
 def is_streamlit_cloud():
@@ -99,19 +97,15 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
                 continue
                 
             splitter = RecursiveCharacterTextSplitter(
-            chunk_size=800, 
-            chunk_overlap=100,
-            length_function=len
+                chunk_size=1000, 
+                chunk_overlap=200,
+                length_function=len
             )
             chunks = splitter.split_documents(pages)
             
             if chunks:
                 all_chunks.extend(chunks)
                 print(f"✅ Added {len(chunks)} chunks from {filename}")
-                
-                # Clean up after processing each file
-                del pages, chunks
-                force_garbage_collection()  # This will now work
             else:
                 print(f"⚠️ No chunks created from {filename}")
                 
@@ -123,10 +117,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
         raise ValueError("No chunks were created from any PDF files")
 
     print(f"📊 Total chunks to process: {len(all_chunks)}")
-    max_chunks = 5000  # Adjust based on your needs
-    if len(all_chunks) > max_chunks:
-        print(f"⚠️ Limiting chunks from {len(all_chunks)} to {max_chunks} to prevent memory issues")
-        all_chunks = all_chunks[:max_chunks]
 
     # --- MODIFIED: Create embeddings using the cached function ---
     print("🧠 Loading embedding model...")
@@ -171,10 +161,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
             print(f"✅ Successfully created vectorstore for {company_name}")
             print(f"📈 Ingested {len(all_chunks)} chunks")
             
-            # Clean up before returning
-            del all_chunks
-            force_garbage_collection()  # This will now work
-            
             return vectordb
             
         except Exception as e:
@@ -186,7 +172,6 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
                 # Force remove everything and wait longer
                 clean_vectorstore_directory(persist_directory)
                 time.sleep(3)
-                force_garbage_collection()  # This will now work
             
             if attempt < max_retries - 1:
                 print(f"⏳ Waiting {2 * (attempt + 1)} seconds before retry...")
