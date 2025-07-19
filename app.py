@@ -311,7 +311,7 @@ with st.sidebar:
     for company in company_folders:
         col1, col2 = st.columns([3, 1])
         with col1:
-            if st.button(f"📂 {company}", key=f"select_{company}"):
+            if st.button(f"📂 {company}", key=f"select_company_{company}"):
                 # Clear vectorstore cache when switching companies
                 if st.session_state.selected_company and st.session_state.selected_company != company:
                     clear_company_vectorstore_cache(st.session_state.selected_company)
@@ -438,7 +438,7 @@ with st.sidebar:
             st.markdown("#### 🗑️ Danger Zone")
             
             if st.button("🗑️ Delete All Company Data", type="secondary"):
-                if st.button("⚠️ CONFIRM DELETE", key="confirm_delete"):
+                if st.button("⚠️ CONFIRM DELETE", key=f"confirm_delete_{selected_company}"):
                     try:
                         # Clear vectorstore cache
                         clear_company_vectorstore_cache(selected_company)
@@ -721,11 +721,11 @@ Please provide a clear, professional response that would be helpful for insuranc
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🔍 Ask Questions", key="nav_questions"):
+        if st.button("🔍 Ask Questions", key=f"nav_questions_{selected_company}"):
             st.session_state.current_view = "Ask Questions"
-    
+
     with col2:
-        if st.button("📊 Dashboard", key="nav_dashboard"):
+        if st.button("📊 Dashboard", key=f"nav_dashboard_{selected_company}"):
             st.session_state.current_view = "Dashboard"
 
 else:
