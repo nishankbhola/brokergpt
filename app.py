@@ -631,7 +631,7 @@ elif st.session_state.selected_company:
         else:  # Ask Questions view
             st.markdown("---")
             display_company_with_logo(selected_company, size=150)
-            st.subheader(f"💬 Ask {selected_company} Questions") 
+            st.subheader(f"💬 Ask {selected_company} Questions")
             
             query = st.text_input("🔍 Enter your question:", placeholder="Ask me anything about underwriting...")
             
