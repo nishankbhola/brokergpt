@@ -490,6 +490,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                         }
 
                         headers = {"Content-Type": "application/json"}
+                        time.sleep(1)
                         response = requests.post(url, headers=headers, data=json.dumps(payload))
 
                         if response.status_code == 200:
@@ -624,10 +625,14 @@ Please provide a clear, professional response that would be helpful for insuranc
                         }
 
                         headers = {"Content-Type": "application/json"}
+                        time.sleep(1)
                         response = requests.post(url, headers=headers, data=json.dumps(payload))
 
                         st.markdown("---")
-                        if response.status_code == 200:
+                        if response.status_code == 429:
+                            st.error("🚫 Rate limit reached. Please wait a moment and try again.")
+                            st.info("💡 Try asking fewer questions or wait 1-2 minutes between requests.")
+                        elif response.status_code == 200:
                             try:
                                 answer = response.json()['candidates'][0]['content']['parts'][0]['text']
                                 st.markdown("### 🤖 Broker-GPT Response")
