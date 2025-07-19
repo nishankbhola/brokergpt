@@ -472,7 +472,7 @@ if st.session_state.current_view == "General Chat":
 """.join([doc.page_content for doc in docs])
                         
                         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
                         payload = {
                             "contents": [{
@@ -606,7 +606,7 @@ elif st.session_state.selected_company:
 """.join([doc.page_content for doc in docs])
 
                         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
                         payload = {
                             "contents": [{
