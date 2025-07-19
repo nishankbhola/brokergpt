@@ -13,6 +13,12 @@ __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
+# ADD THIS FUNCTION - This is the missing function causing NameError
+def force_garbage_collection():
+    """Force garbage collection to free up memory"""
+    import gc
+    gc.collect()
+    print("🧹 Memory cleanup performed")
 
 # Helper to detect cloud
 def is_streamlit_cloud():
@@ -102,6 +108,10 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
             if chunks:
                 all_chunks.extend(chunks)
                 print(f"✅ Added {len(chunks)} chunks from {filename}")
+                
+                # Clean up after processing each file
+                del pages, chunks
+                force_garbage_collection()  # This will now work
             else:
                 print(f"⚠️ No chunks created from {filename}")
                 
@@ -157,6 +167,10 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
             print(f"✅ Successfully created vectorstore for {company_name}")
             print(f"📈 Ingested {len(all_chunks)} chunks")
             
+            # Clean up before returning
+            del all_chunks
+            force_garbage_collection()  # This will now work
+            
             return vectordb
             
         except Exception as e:
@@ -168,6 +182,7 @@ def ingest_company_pdfs(company_name: str, persist_directory: str = None):
                 # Force remove everything and wait longer
                 clean_vectorstore_directory(persist_directory)
                 time.sleep(3)
+                force_garbage_collection()  # This will now work
             
             if attempt < max_retries - 1:
                 print(f"⏳ Waiting {2 * (attempt + 1)} seconds before retry...")
