@@ -178,7 +178,7 @@ st.markdown("""
     .metric-card {
         background: white;
         border: 1px solid #e0e0e0;
-        border_radius: 8px;
+        border-radius: 8px;
         padding: 1rem;
         margin: 0.5rem;
         text-align: center;
@@ -186,14 +186,14 @@ st.markdown("""
     .danger-zone {
         background: #fff5f5;
         border: 2px solid #feb2b2;
-        border_radius: 10px;
+        border-radius: 10px;
         padding: 1rem;
         margin: 1rem 0;
     }
     .success-zone {
         background: #f0fff4;
         border: 2px solid #9ae6b4;
-        border_radius: 10px;
+        border-radius: 10px;
         padding: 1rem;
         margin: 1rem 0;
     }
@@ -273,6 +273,7 @@ with st.sidebar:
                 
                 st.session_state.selected_company = company
                 st.session_state.upload_success_message = None
+                st.session_state.current_view = "Ask Questions" # Set view to Ask Questions
                 st.rerun()
         
         with col2:
@@ -432,7 +433,9 @@ with st.sidebar:
 # Main content area
 
 # Add a radio button for view selection (Ask Questions or General Chat)
-view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat"), index=1)
+view_options = ("Ask Questions", "General Chat")
+initial_index = view_options.index(st.session_state.current_view)
+view_option = st.sidebar.radio("Select View", view_options, index=initial_index)
 st.session_state.current_view = view_option
 
 
