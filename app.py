@@ -253,6 +253,14 @@ with st.sidebar:
 
     # Company selection
     st.markdown("---")
+
+
+    # Add a radio button for view selection (Ask Questions or General Chat)
+    view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat"))
+    st.session_state.current_view = view_option
+
+
+
     st.markdown("### 📁 Select Company")
     
     company_folders = [f for f in os.listdir(company_base_dir) 
@@ -431,9 +439,9 @@ with st.sidebar:
 
 # Main content area
 
-# Add a radio button for view selection (Ask Questions or General Chat)
-view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat"))
-st.session_state.current_view = view_option
+# # Add a radio button for view selection (Ask Questions or General Chat)
+# view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat"))
+# st.session_state.current_view = view_option
 
 
 
