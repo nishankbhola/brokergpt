@@ -265,7 +265,7 @@ with st.sidebar:
     # Admin section
     # Admin section with unique button keys
     st.markdown("### 🔧 Admin Controls")
-    if st.button("🔐 Admin Access", key=f"admin_access_toggle_{int(time.time())}"):
+    if st.button("🔐 Admin Access"):
         st.session_state.admin_authenticated = False
     
     if check_admin_password():
