@@ -445,10 +445,83 @@ if st.session_state.current_view == "General Chat":
     general_query = st.text_input("🔍 Enter your question for all companies:", placeholder="Ask a general question...")
     
     if general_query:
-        # This is where we will add the logic to query all companies and display responses
         st.info("Fetching responses from all companies...")
-        # Placeholder for displaying results
-        st.write("Results will appear here company by company.")
+        
+        company_base_dir = "data/pdfs"
+        company_folders = [f for f in os.listdir(company_base_dir) 
+                          if os.path.isdir(os.path.join(company_base_dir, f))]
+        
+        if not company_folders:
+            st.warning("⚠️ No companies found to query.")
+        else:
+            VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+            
+            for company in company_folders:
+                vectorstore_path = os.path.join(VECTORSTORE_ROOT, company)
+                
+                if os.path.exists(vectorstore_path):
+                    st.markdown(f"### 🏢 Response from {company}")
+                    try:
+                        # Get company-specific vectorstore
+                        vectorstore = get_company_vectorstore(company, vectorstore_path)
+                        
+                        retriever = vectorstore.as_retriever()
+                        docs = retriever.get_relevant_documents(general_query)
+                        context = """
+
+""".join([doc.page_content for doc in docs])
+
+                        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+
+                        payload = {
+                            "contents": [{
+                                "parts": [{
+                                    "text": f"""As a professional insurance broker assistant, answer the following question using ONLY the context provided for {company}.
+
+Question: {general_query}
+
+Context from {company}: {context}
+
+Please provide a clear, professional response that would be helpful for insurance brokers and their clients. Base your answer ONLY on the provided context from {company}.
+"""
+                                }]
+                            }]
+                        }
+
+                        headers = {"Content-Type": "application/json"}
+                        response = requests.post(url, headers=headers, data=json.dumps(payload))
+
+                        if response.status_code == 200:
+                            try:
+                                answer = response.json()['candidates'][0]['content']['parts'][0]['text']
+                                st.success(answer)
+                                
+                                # Show source documents
+                                if docs:
+                                    with st.expander("📚 Source Documents"):
+                                        for i, doc in enumerate(docs[:3]):
+                                            st.markdown(f"**Source {i+1}:**")
+                                            st.text(doc.page_content[:500] + "...")
+                                            st.markdown("---")
+                                            
+                            except Exception as e:
+                                st.error("❌ Error parsing response from Gemini")
+                        else:
+                            st.error(f"❌ Gemini API Error: {response.status_code}")
+                            
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "no such table: tenants" in error_msg:
+                            st.error("❌ Database error detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
+                            clear_company_vectorstore_cache(company)
+                        else:
+                            st.error(f"❌ Error accessing knowledge base: {error_msg}")
+                            st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
+                            clear_company_vectorstore_cache(company)
+                else:
+                    st.warning(f"⚠️ Knowledge base not found for {company}.")
+                st.markdown("---")
 
 elif st.session_state.selected_company:
     selected_company = st.session_state.selected_company
