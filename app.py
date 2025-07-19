@@ -126,8 +126,53 @@ def get_uploaded_pdfs(company_name):
         return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
     return []
 
+def call_gemini_with_fallback(payload):
+    """Call Gemini API with automatic model fallback on rate limit"""
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    headers = {"Content-Type": "application/json"}
+    
+    for attempt in range(len(GEMINI_MODELS)):
+        current_model = GEMINI_MODELS[st.session_state.current_model_index]
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
+        
+        try:
+            time.sleep(1)
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            
+            if response.status_code == 200:
+                return response, current_model
+            elif response.status_code == 429:
+                st.warning(f"⚠️ Rate limit reached for {current_model}, trying next model...")
+                # Switch to next model
+                st.session_state.current_model_index = (st.session_state.current_model_index + 1) % len(GEMINI_MODELS)
+                time.sleep(2)  # Wait before trying next model
+                continue
+            else:
+                return response, current_model
+                
+        except Exception as e:
+            st.error(f"❌ Error with {current_model}: {str(e)}")
+            st.session_state.current_model_index = (st.session_state.current_model_index + 1) % len(GEMINI_MODELS)
+            continue
+    
+    # If all models failed, return the last response
+    return response, current_model
+    
 # Load environment variables
 load_dotenv()
+
+# Gemini model fallback configuration (ordered by preference)
+GEMINI_MODELS = [
+    "gemini-2.5-flash",           # 15 RPM, 1M TPM, 1000 RPD
+    "gemini-2.5-flash-lite-preview-06-17",  # 15 RPM, 250K TPM, 1000 RPD  
+    "gemini-2.0-flash",           # 10 RPM, 250K TPM, 250 RPD
+    "gemini-2.0-flash-lite",      # 30 RPM, 1M TPM, 200 RPD
+    "gemini-2.5-pro"              # 5 RPM, 250K TPM, 100 RPD
+]
+
+# Initialize session state for model tracking
+if 'current_model_index' not in st.session_state:
+    st.session_state.current_model_index = 0
 
 # Initialize session state
 if 'selected_company' not in st.session_state:
@@ -471,9 +516,6 @@ if st.session_state.current_view == "General Chat":
 
 """.join([doc.page_content for doc in docs])
                         
-                        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-
                         payload = {
                             "contents": [{
                                 "parts": [{
@@ -489,9 +531,8 @@ Please provide a clear, professional response that would be helpful for insuranc
                             }]
                         }
 
-                        headers = {"Content-Type": "application/json"}
-                        time.sleep(1)
-                        response = requests.post(url, headers=headers, data=json.dumps(payload))
+                        response, used_model = call_gemini_with_fallback(payload)
+                        st.info(f"🤖 Using model: {used_model}")
 
                         if response.status_code == 200:
                             try:
@@ -606,9 +647,6 @@ elif st.session_state.selected_company:
 
 """.join([doc.page_content for doc in docs])
 
-                        GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-                        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-
                         payload = {
                             "contents": [{
                                 "parts": [{
@@ -624,9 +662,8 @@ Please provide a clear, professional response that would be helpful for insuranc
                             }]
                         }
 
-                        headers = {"Content-Type": "application/json"}
-                        time.sleep(1)
-                        response = requests.post(url, headers=headers, data=json.dumps(payload))
+                        response, used_model = call_gemini_with_fallback(payload)
+                        st.info(f"🤖 Using model: {used_model}")
 
                         st.markdown("---")
                         if response.status_code == 429:
