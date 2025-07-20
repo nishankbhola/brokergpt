@@ -814,8 +814,25 @@ elif st.session_state.selected_company:
     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
     vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
     
-    if not os.path.exists(vectorstore_path):
-        st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.") 
+    # Check if vectorstore exists and has actual data
+    vectorstore_exists = False
+    if os.path.exists(vectorstore_path):
+        # Check if the directory has any files (not just empty directory)
+        try:
+            files_in_vectorstore = []
+            for root, dirs, files in os.walk(vectorstore_path):
+                files_in_vectorstore.extend(files)
+            
+            # Consider vectorstore valid if it has files
+            if files_in_vectorstore:
+                vectorstore_exists = True
+            else:
+                st.warning(f"⚠️ Empty vectorstore found for {selected_company}. Please use 'Relearn PDFs'.")
+        except Exception as e:
+            st.warning(f"⚠️ Error checking vectorstore for {selected_company}: {str(e)}")
+    
+    if not vectorstore_exists:
+        st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.")
     else:
         if st.session_state.current_view == "Dashboard":
             st.markdown("---")
