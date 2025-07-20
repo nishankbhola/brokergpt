@@ -29,74 +29,49 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
     """Create Chroma vectorstore with enhanced retry logic and company-specific caching"""
     for attempt in range(max_retries):
         try:
-            # Clear any existing chroma client for this company
             vectorstore_key = f'vectorstore_{company_name}'
-            if vectorstore_key in st.session_state:
-                del st.session_state[vectorstore_key]
-            
+            st.session_state.pop(vectorstore_key, None)
             os.makedirs(vectorstore_path, exist_ok=True)
-            
-            # --- MODIFIED: Use the cached function to get the model ---
             embedding_function = load_embedding_model()
-            
             vectorstore = Chroma(
                 persist_directory=vectorstore_path,
                 embedding_function=embedding_function,
                 client_settings=None
             )
-            
             vectorstore._client.heartbeat()
             return vectorstore
-            
         except Exception as e:
             if attempt < max_retries - 1:
-                wait_time = 2 * (attempt + 1)
-                time.sleep(wait_time)
-                
-                # More aggressive cleanup on retry
+                time.sleep(2 * (attempt + 1))
                 if os.path.exists(vectorstore_path):
-                    try:
-                        for file in os.listdir(vectorstore_path):
-                            if file.endswith('.sqlite3') or file.endswith('.db'):
-                                file_path = os.path.join(vectorstore_path, file)
-                                try:
-                                    os.remove(file_path)
-                                except:
-                                    pass
-                    except:
-                        pass
+                    for file in os.listdir(vectorstore_path):
+                        if file.endswith(('.sqlite3', '.db')):
+                            try:
+                                os.remove(os.path.join(vectorstore_path, file))
+                            except Exception:
+                                pass
             else:
-                raise e
+                raise
 
 def get_company_logo(company_name):
     """Get company logo if it exists"""
     logo_path = os.path.join("data/logos", f"{company_name}.png")
-    if os.path.exists(logo_path):
-        return Image.open(logo_path)
-    return None
+    return Image.open(logo_path) if os.path.exists(logo_path) else None
 
 def display_company_with_logo(company_name, size=50):
     """Display company name with logo if available"""
     logo = get_company_logo(company_name)
     if logo:
-        col1, col2 = st.columns([1, 4])
-        with col1:
-            st.image(logo, width=size)
-    else:
-        st.markdown(f"🏢 **{company_name}**")
+        st.image(logo, width=size)
+    st.markdown(f"🏢 **{company_name}**")
 
 def check_admin_password():
     """Check if admin password is correct"""
-    if 'admin_authenticated' not in st.session_state:
-        st.session_state.admin_authenticated = False
-    
-    if not st.session_state.admin_authenticated:
+    if not st.session_state.get('admin_authenticated', False):
         with st.form("admin_login"):
             st.subheader("🔐 Admin Access Required")
             password = st.text_input("Enter admin password:", type="password")
-            submitted = st.form_submit_button("Login")
-            
-            if submitted:
+            if st.form_submit_button("Login"):
                 if password == "classmate":
                     st.session_state.admin_authenticated = True
                     st.success("✅ Admin access granted!")
@@ -109,25 +84,19 @@ def check_admin_password():
 
 def clear_company_vectorstore_cache(company_name):
     """Clear vectorstore cache for a specific company"""
-    vectorstore_key = f'vectorstore_{company_name}'
-    if vectorstore_key in st.session_state:
-        del st.session_state[vectorstore_key]
+    st.session_state.pop(f'vectorstore_{company_name}', None)
 
 def get_company_vectorstore(company_name, vectorstore_path):
     """Get or create company-specific vectorstore with proper caching"""
     vectorstore_key = f'vectorstore_{company_name}'
-    
     if vectorstore_key not in st.session_state:
         st.session_state[vectorstore_key] = create_chroma_vectorstore(vectorstore_path, company_name)
-    
     return st.session_state[vectorstore_key]
 
 def get_uploaded_pdfs(company_name):
     """Get list of uploaded PDFs for a company"""
     company_pdf_dir = os.path.join("data/pdfs", company_name)
-    if os.path.exists(company_pdf_dir):
-        return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
-    return []
+    return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")] if os.path.exists(company_pdf_dir) else []
 
 def call_gemini_with_fallback(payload):
     """Call Gemini API with automatic model fallback on rate limit"""
@@ -137,28 +106,20 @@ def call_gemini_with_fallback(payload):
     for attempt in range(len(GEMINI_MODELS)):
         current_model = GEMINI_MODELS[st.session_state.current_model_index]
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
-        
         try:
             time.sleep(1)
             response = requests.post(url, headers=headers, data=json.dumps(payload))
-            
             if response.status_code == 200:
                 return response, current_model
-            elif response.status_code == 429:
+            if response.status_code == 429:
                 st.warning(f"⚠️ Rate limit reached for {current_model}, trying next model...")
-                # Switch to next model
                 st.session_state.current_model_index = (st.session_state.current_model_index + 1) % len(GEMINI_MODELS)
-                time.sleep(2)  # Wait before trying next model
+                time.sleep(2)
                 continue
-            else:
-                return response, current_model
-                
+            return response, current_model
         except Exception as e:
             st.error(f"❌ Error with {current_model}: {str(e)}")
             st.session_state.current_model_index = (st.session_state.current_model_index + 1) % len(GEMINI_MODELS)
-            continue
-    
-    # If all models failed, return the last response
     return response, current_model
 
 # Add this function after the existing utility functions (around line 100)
@@ -905,44 +866,27 @@ Please provide a clear, professional response that would be helpful for insuranc
                                                             data=f,
                                                             file_name=os.path.basename(source_file),
                                                             mime="application/pdf",
-                                                            key=f"download_{selected_company}_{i}"
+                                                            key=f"dl_{selected_company}_{i}"
                                                         )
-                                            st.markdown("---")
-                                            
                             except Exception as e:
-                                st.error("❌ Error parsing response from Gemini")
-                        else:
-                            st.error(f"❌ Gemini API Error: {response.status_code}")
-                            
-                    except Exception as e:
-                        error_msg = str(e)
-                        if "no such table: tenants" in error_msg:
-                            st.error("❌ Database error detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            clear_company_vectorstore_cache(selected_company)
-                        else:
-                            st.error(f"❌ Error accessing knowledge base: {error_msg}")
-                            st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
-                            clear_company_vectorstore_cache(selected_company)
-    
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🔍 Ask Questions", key="nav_questions"):
-            st.session_state.current_view = "Ask Questions"
-    
-    with col2:
-        if st.button("📊 Dashboard", key="nav_dashboard"):
-            st.session_state.current_view = "Dashboard"
+                                error_msg = str(e)
+                                st.error(f"❌ {'Database error detected.' if 'no such table: tenants' in error_msg else error_msg}")
+                                clear_company_vectorstore_cache(selected_company)
+                                st.info("💡 Use admin access to rebuild the knowledge base.")
 
+# Navigation
+if st.session_state.selected_company:
+    _, c1, c2, _ = st.columns([1, 2, 2, 1])
+    if c1.button("🔍 Questions", key="nav_q"): 
+        st.session_state.current_view = "Ask Questions"
+    if c2.button("📊 Dashboard", key="nav_d"): 
+        st.session_state.current_view = "Dashboard"
 else:
     st.info("👆 Please select a company from the sidebar to continue.")
 
 # Footer
-st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 16.0.5 | 2025"
+    "🤖 Broker-GPT | AI-Powered | v16.0.5"
     "</div>", 
-    unsafe_allow_html=True
-)
+    unsafe_allow_html=True)
