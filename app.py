@@ -934,7 +934,8 @@ elif st.session_state.selected_company:
         # Vectorstore directory doesn't exist at all
         vectorstore_exists = False
     
-    if not vectorstore_exists:
+    #if not vectorstore_exists:
+    if 1==0:
         st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.")
     else:
         if st.session_state.current_view == "Dashboard":
