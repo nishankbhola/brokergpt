@@ -222,26 +222,46 @@ def restore_from_backup(uploaded_file):
                 if member.endswith('/'):
                     continue
                 
-                # Determine extraction path
+                # Determine extraction path - FIXED: Handle absolute paths properly
                 if member.startswith('data/'):
+                    # For data files, use relative path from current directory
                     extract_path = member  # Keep data/ structure
                 elif member.startswith('vectorstores/'):
+                    # For vectorstores, use the proper base directory
                     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-                    extract_path = os.path.join(VECTORSTORE_ROOT, member[12:])  # Remove 'vectorstores/' prefix
+                    # Remove 'vectorstores/' prefix and join with base path
+                    relative_path = member[12:]  # Remove 'vectorstores/' prefix
+                    extract_path = os.path.join(VECTORSTORE_ROOT, relative_path)
                 else:
                     continue  # Skip unknown files
                 
+                # FIXED: Ensure extract_path is always relative or properly constructed
+                # Convert absolute paths to relative if they somehow got through
+                if os.path.isabs(extract_path) and not extract_path.startswith(('/mount/tmp', '/tmp')):
+                    # If it's an absolute path but not in allowed directories, make it relative
+                    extract_path = extract_path.lstrip('/')
+                    extract_path = os.path.join('.', extract_path)
+                
                 # Create directory if it doesn't exist
-                os.makedirs(os.path.dirname(extract_path), exist_ok=True)
+                extract_dir = os.path.dirname(extract_path)
+                if extract_dir:  # Only create if there's actually a directory path
+                    os.makedirs(extract_dir, exist_ok=True)
                 
                 # Extract file
-                with zip_file.open(member) as source, open(extract_path, 'wb') as target:
-                    target.write(source.read())
-                
-                # Track companies for cache clearing
-                if member.startswith('data/pdfs/'):
-                    company_name = member.split('/')[2]  # data/pdfs/COMPANY/file.pdf
-                    extracted_companies.add(company_name)
+                try:
+                    with zip_file.open(member) as source, open(extract_path, 'wb') as target:
+                        target.write(source.read())
+                    
+                    # Track companies for cache clearing
+                    if member.startswith('data/pdfs/'):
+                        parts = member.split('/')
+                        if len(parts) >= 3:  # data/pdfs/COMPANY/...
+                            company_name = parts[2]
+                            extracted_companies.add(company_name)
+                            
+                except Exception as file_error:
+                    st.warning(f"⚠️ Could not extract {member}: {file_error}")
+                    continue
         
         # Clear vectorstore cache for all restored companies
         for company in extracted_companies:
@@ -253,6 +273,12 @@ def restore_from_backup(uploaded_file):
         return True, extracted_companies
         
     except Exception as e:
+        # Clean up temp file in case of error
+        try:
+            if 'tmp_file_path' in locals():
+                os.unlink(tmp_file_path)
+        except:
+            pass
         return False, str(e)
 
 # Load environment variables
