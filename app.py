@@ -11,6 +11,9 @@ from PIL import Image
 from dotenv import load_dotenv
 from langchain.vectorstores import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
+import zipfile
+import tempfile
+from io import BytesIO
 
 # --- NEW: Cached function to load the embedding model ---
 @st.cache_resource
