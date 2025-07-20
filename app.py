@@ -365,89 +365,89 @@ with st.sidebar:
         st.session_state.admin_authenticated = False
 
     if check_admin_password():
-    st.markdown('<div class="success-zone">', unsafe_allow_html=True)
-    st.success("🔓 Admin Mode Active")
-    
-    # Backup/Restore Section
-    st.markdown("#### 💾 Backup & Restore")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Download Backup
-        if st.button("📥 Create Full Backup", help="Download all PDFs and vectorstores"):
-            with st.spinner("🔄 Creating backup..."):
-                backup_data = create_full_backup()
-                if backup_data:
-                    from datetime import datetime
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    filename = f"brokergpt_backup_{timestamp}.zip"
-                    
-                    st.download_button(
-                        label="📥 Download Backup",
-                        data=backup_data,
-                        file_name=filename,
-                        mime="application/zip",
-                        help="Click to download the complete backup file"
-                    )
-                    st.success("✅ Backup created successfully!")
-    
-    with col2:
-        # Upload Restore
-        st.markdown("**Restore from Backup:**")
-        backup_file = st.file_uploader(
-            "Upload backup file:",
-            type=['zip'],
-            help="Upload a previously created backup file",
-            key="backup_uploader"
-        )
+        st.markdown('<div class="success-zone">', unsafe_allow_html=True)
+        st.success("🔓 Admin Mode Active")
         
-        if backup_file:
-            if st.button("🔄 Restore Backup", type="secondary"):
-                with st.spinner("🔄 Restoring from backup..."):
-                    success, result = restore_from_backup(backup_file)
-                    
-                    if success:
-                        companies = result
-                        st.success(f"✅ Successfully restored {len(companies)} companies!")
-                        st.info(f"Restored companies: {', '.join(companies)}")
-                        
-                        # Clear all session state to force refresh
-                        for key in list(st.session_state.keys()):
-                            if key.startswith('vectorstore_'):
-                                del st.session_state[key]
-                        
-                        time.sleep(2)
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Restore failed: {result}")
-    
-    st.markdown("---")
-    
-    # Add new company (existing code)
-    st.markdown("#### ➕ Add New Company")
-    with st.form("add_company_form"):
-        new_company = st.text_input("Company Name:")
-        logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
-        add_submitted = st.form_submit_button("Add Company")
+        # Backup/Restore Section
+        st.markdown("#### 💾 Backup & Restore")
         
-        if add_submitted and new_company:
-            new_path = os.path.join(company_base_dir, new_company)
-            if not os.path.exists(new_path):
-                os.makedirs(new_path)
-                
-                # Save logo if uploaded
-                if logo_file is not None:
-                    logo_path = os.path.join(logos_dir, f"{new_company}.png")
-                    with open(logo_path, "wb") as f:
-                        f.write(logo_file.getbuffer())
-                
-                st.success(f"✅ Added company: {new_company}")
-                st.rerun()
-            else:
-                st.warning("⚠️ Company already exists")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Download Backup
+            if st.button("📥 Create Full Backup", help="Download all PDFs and vectorstores"):
+                with st.spinner("🔄 Creating backup..."):
+                    backup_data = create_full_backup()
+                    if backup_data:
+                        from datetime import datetime
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        filename = f"brokergpt_backup_{timestamp}.zip"
+                        
+                        st.download_button(
+                            label="📥 Download Backup",
+                            data=backup_data,
+                            file_name=filename,
+                            mime="application/zip",
+                            help="Click to download the complete backup file"
+                        )
+                        st.success("✅ Backup created successfully!")
+        
+        with col2:
+            # Upload Restore
+            st.markdown("**Restore from Backup:**")
+            backup_file = st.file_uploader(
+                "Upload backup file:",
+                type=['zip'],
+                help="Upload a previously created backup file",
+                key="backup_uploader"
+            )
+            
+            if backup_file:
+                if st.button("🔄 Restore Backup", type="secondary"):
+                    with st.spinner("🔄 Restoring from backup..."):
+                        success, result = restore_from_backup(backup_file)
+                        
+                        if success:
+                            companies = result
+                            st.success(f"✅ Successfully restored {len(companies)} companies!")
+                            st.info(f"Restored companies: {', '.join(companies)}")
+                            
+                            # Clear all session state to force refresh
+                            for key in list(st.session_state.keys()):
+                                if key.startswith('vectorstore_'):
+                                    del st.session_state[key]
+                            
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Restore failed: {result}")
+        
+        st.markdown("---")
+        
+        # Add new company (existing code)
+        st.markdown("#### ➕ Add New Company")
+        with st.form("add_company_form"):
+            new_company = st.text_input("Company Name:")
+            logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
+            add_submitted = st.form_submit_button("Add Company")
+            
+            if add_submitted and new_company:
+                new_path = os.path.join(company_base_dir, new_company)
+                if not os.path.exists(new_path):
+                    os.makedirs(new_path)
+                    
+                    # Save logo if uploaded
+                    if logo_file is not None:
+                        logo_path = os.path.join(logos_dir, f"{new_company}.png")
+                        with open(logo_path, "wb") as f:
+                            f.write(logo_file.getbuffer())
+                    
+                    st.success(f"✅ Added company: {new_company}")
+                    st.rerun()
+                else:
+                    st.warning("⚠️ Company already exists")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Company selection
     st.markdown("---")
