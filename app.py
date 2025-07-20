@@ -310,6 +310,11 @@ def restore_from_backup(uploaded_file):
         for company in extracted_companies:
             clear_company_vectorstore_cache(company)
         
+        # ADDITION: Force session state refresh for all vectorstore-related keys
+        keys_to_remove = [key for key in st.session_state.keys() if key.startswith('vectorstore_')]
+        for key in keys_to_remove:
+            del st.session_state[key]
+        
         # Clean up temp file
         os.unlink(tmp_file_path)
         
@@ -318,6 +323,18 @@ def restore_from_backup(uploaded_file):
         st.info(f"   • Successful extractions: {successful_extractions}")
         st.info(f"   • Failed extractions: {failed_extractions}")
         st.info(f"   • Companies found: {len(extracted_companies)}")
+        
+        # ADDITION: Verify vectorstore paths exist for debugging
+        VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+        st.info(f"📁 Vectorstore locations:")
+        for company in extracted_companies:
+            vs_path = os.path.join(VECTORSTORE_ROOT, company)
+            exists = os.path.exists(vs_path)
+            if exists:
+                file_count = len([f for f in os.listdir(vs_path) if os.path.isfile(os.path.join(vs_path, f))])
+                st.info(f"   • {company}: ✅ ({file_count} files)")
+            else:
+                st.warning(f"   • {company}: ❌ (not found)")
         
         return True, extracted_companies
         
@@ -664,7 +681,22 @@ with st.sidebar:
             # Delete company data
             st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
             st.markdown("#### 🗑️ Danger Zone")
-            
+            # Debug vectorstore status
+            if st.button("🔍 Debug Vectorstore Status"):
+                VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+                st.info(f"Vectorstore root: {VECTORSTORE_ROOT}")
+                
+                for company in company_folders:
+                    vs_path = os.path.join(VECTORSTORE_ROOT, company)
+                    st.info(f"Company: {company}")
+                    st.info(f"  Path: {vs_path}")
+                    st.info(f"  Exists: {os.path.exists(vs_path)}")
+                    if os.path.exists(vs_path):
+                        files = os.listdir(vs_path)
+                        st.info(f"  Files: {files}")
+                        # Check for database files specifically
+                        db_files = [f for f in files if f.endswith(('.sqlite3', '.db', '.parquet'))]
+                        st.info(f"  Database files: {db_files}")
             if st.button("🗑️ Delete All Company Data", type="secondary"):
                 if st.button("⚠️ CONFIRM DELETE", key="confirm_delete"):
                     try:
@@ -817,19 +849,37 @@ elif st.session_state.selected_company:
     # Check if vectorstore exists and has actual data
     vectorstore_exists = False
     if os.path.exists(vectorstore_path):
-        # Check if the directory has any files (not just empty directory)
         try:
+            # Check if the directory has any files (not just empty directory)
             files_in_vectorstore = []
             for root, dirs, files in os.walk(vectorstore_path):
                 files_in_vectorstore.extend(files)
             
-            # Consider vectorstore valid if it has files
+            # Consider vectorstore valid if it has files, especially database files
             if files_in_vectorstore:
-                vectorstore_exists = True
+                # Check for specific vectorstore files that indicate a valid Chroma database
+                db_files = [f for f in files_in_vectorstore if f.endswith(('.sqlite3', '.db', '.parquet'))]
+                if db_files:
+                    vectorstore_exists = True
+                    # Also try to initialize the vectorstore to make sure it's accessible
+                    try:
+                        test_vectorstore = get_company_vectorstore(selected_company, vectorstore_path)
+                        # Try a simple operation to verify it works
+                        test_vectorstore._client.heartbeat()
+                        vectorstore_exists = True
+                    except Exception as test_error:
+                        st.warning(f"⚠️ Vectorstore files found but not accessible: {str(test_error)}")
+                        vectorstore_exists = False
+                else:
+                    st.warning(f"⚠️ Vectorstore directory exists but no database files found for {selected_company}.")
             else:
                 st.warning(f"⚠️ Empty vectorstore found for {selected_company}. Please use 'Relearn PDFs'.")
         except Exception as e:
             st.warning(f"⚠️ Error checking vectorstore for {selected_company}: {str(e)}")
+            vectorstore_exists = False
+    else:
+        # Vectorstore directory doesn't exist at all
+        vectorstore_exists = False
     
     if not vectorstore_exists:
         st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.")
