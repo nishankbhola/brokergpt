@@ -205,6 +205,7 @@ def create_full_backup():
         st.error(f"❌ Error creating backup: {str(e)}")
         return None
 
+
 def restore_from_backup(uploaded_file):
     """Restore all data from uploaded backup file"""
     try:
@@ -223,10 +224,17 @@ def restore_from_backup(uploaded_file):
             
             # First pass: identify all companies in the backup
             for member in zip_file.namelist():
-                if member.startswith('data/pdfs/') and not member.endswith('/'):
+                # Handle both old format (data/pdfs/) and new format (pdfs/)
+                if ((member.startswith('data/pdfs/') or member.startswith('pdfs/')) and 
+                    not member.endswith('/')):
                     parts = member.split('/')
-                    if len(parts) >= 3:  # data/pdfs/COMPANY/...
+                    # For data/pdfs/COMPANY/... format
+                    if member.startswith('data/pdfs/') and len(parts) >= 3:
                         company_name = parts[2]
+                        extracted_companies.add(company_name)
+                    # For pdfs/COMPANY/... format
+                    elif member.startswith('pdfs/') and len(parts) >= 2:
+                        company_name = parts[1]
                         extracted_companies.add(company_name)
             
             st.info(f"🏢 Found companies in backup: {', '.join(extracted_companies) if extracted_companies else 'None'}")
@@ -243,6 +251,14 @@ def restore_from_backup(uploaded_file):
                 if member.startswith('data/'):
                     # For data files, use relative path from current directory
                     extract_path = member  # Keep data/ structure
+                elif member.startswith('pdfs/'):
+                    # Handle the pdfs/ format by converting to data/pdfs/
+                    relative_path = member[5:]  # Remove 'pdfs/' prefix
+                    extract_path = os.path.join("data", "pdfs", relative_path)
+                elif member.startswith('logos/'):
+                    # Handle logos/ format by converting to data/logos/
+                    relative_path = member[6:]  # Remove 'logos/' prefix
+                    extract_path = os.path.join("data", "logos", relative_path)
                 elif member.startswith('vectorstores/'):
                     # For vectorstores, use the proper base directory
                     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
@@ -273,11 +289,16 @@ def restore_from_backup(uploaded_file):
                         target.write(source.read())
                     successful_extractions += 1
                     
-                    # Track companies for cache clearing (additional check)
+                    # Track companies for cache clearing (additional check for both formats)
                     if member.startswith('data/pdfs/'):
                         parts = member.split('/')
                         if len(parts) >= 3:  # data/pdfs/COMPANY/...
                             company_name = parts[2]
+                            extracted_companies.add(company_name)
+                    elif member.startswith('pdfs/'):
+                        parts = member.split('/')
+                        if len(parts) >= 2:  # pdfs/COMPANY/...
+                            company_name = parts[1]
                             extracted_companies.add(company_name)
                             
                 except Exception as file_error:
