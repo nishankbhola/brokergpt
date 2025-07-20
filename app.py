@@ -206,6 +206,8 @@ def create_full_backup():
         return None
 
 
+# Replace your restore_from_backup function with this enhanced debug version:
+
 def restore_from_backup(uploaded_file):
     """Restore all data from uploaded backup file"""
     try:
@@ -218,9 +220,21 @@ def restore_from_backup(uploaded_file):
         successful_extractions = 0
         failed_extractions = 0
         
+        # ENHANCED DEBUG: Show what paths will be used
+        VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+        st.info(f"🔍 DEBUGGING PATHS:")
+        st.info(f"   • Vectorstore root will be: {VECTORSTORE_ROOT}")
+        st.info(f"   • PDF root will be: data/pdfs/")
+        st.info(f"   • Logos root will be: data/logos/")
+        
         with zipfile.ZipFile(tmp_file_path, 'r') as zip_file:
-            # Debug: Print all files in the zip
+            # Enhanced Debug: Print all files in the zip
             st.info(f"📦 Zip file contains {len(zip_file.namelist())} files")
+            
+            # Show first 10 files for debugging
+            st.info("🔍 First 10 files in zip:")
+            for i, member in enumerate(zip_file.namelist()[:10]):
+                st.info(f"   {i+1}. {member}")
             
             # First pass: identify all companies in the backup
             for member in zip_file.namelist():
@@ -238,6 +252,24 @@ def restore_from_backup(uploaded_file):
                         extracted_companies.add(company_name)
             
             st.info(f"🏢 Found companies in backup: {', '.join(extracted_companies) if extracted_companies else 'None'}")
+            
+            # ENHANCED DEBUG: Track vectorstore files specifically
+            vectorstore_files_found = {}
+            for member in zip_file.namelist():
+                if member.startswith('vectorstores/'):
+                    parts = member.split('/')
+                    if len(parts) >= 2:
+                        company_name = parts[1]
+                        if company_name not in vectorstore_files_found:
+                            vectorstore_files_found[company_name] = []
+                        vectorstore_files_found[company_name].append(member)
+            
+            st.info(f"🗃️ Vectorstore files found for companies:")
+            for company, files in vectorstore_files_found.items():
+                st.info(f"   • {company}: {len(files)} files")
+                # Show first few files
+                for file in files[:3]:
+                    st.info(f"     - {file}")
             
             # Extract everything
             for member in zip_file.namelist():
@@ -261,10 +293,12 @@ def restore_from_backup(uploaded_file):
                     extract_path = os.path.join("data", "logos", relative_path)
                 elif member.startswith('vectorstores/'):
                     # For vectorstores, use the proper base directory
-                    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
                     # Remove 'vectorstores/' prefix and join with base path
                     relative_path = member[12:]  # Remove 'vectorstores/' prefix
                     extract_path = os.path.join(VECTORSTORE_ROOT, relative_path)
+                    
+                    # ENHANCED DEBUG: Show exactly where vectorstore files will go
+                    st.info(f"🗃️ Vectorstore file: {member} → {extract_path}")
                 else:
                     st.warning(f"⚠️ Skipping unknown file: {member}")
                     continue
@@ -289,6 +323,11 @@ def restore_from_backup(uploaded_file):
                         target.write(source.read())
                     successful_extractions += 1
                     
+                    # ENHANCED DEBUG: Confirm vectorstore files were written
+                    if member.startswith('vectorstores/'):
+                        file_size = os.path.getsize(extract_path)
+                        st.info(f"✅ Wrote vectorstore file: {extract_path} ({file_size} bytes)")
+                    
                     # Track companies for cache clearing (additional check for both formats)
                     if member.startswith('data/pdfs/'):
                         parts = member.split('/')
@@ -306,11 +345,36 @@ def restore_from_backup(uploaded_file):
                     failed_extractions += 1
                     continue
         
+        # ENHANCED DEBUG: Verify what was actually restored
+        st.info(f"🔍 POST-RESTORE VERIFICATION:")
+        for company in extracted_companies:
+            vs_path = os.path.join(VECTORSTORE_ROOT, company)
+            st.info(f"Company: {company}")
+            st.info(f"  Vectorstore path: {vs_path}")
+            st.info(f"  Path exists: {os.path.exists(vs_path)}")
+            
+            if os.path.exists(vs_path):
+                try:
+                    files = os.listdir(vs_path)
+                    st.info(f"  Files found: {files}")
+                    db_files = [f for f in files if f.endswith(('.sqlite3', '.db', '.parquet'))]
+                    st.info(f"  Database files: {db_files}")
+                    
+                    # Check file sizes
+                    for file in files:
+                        file_path = os.path.join(vs_path, file)
+                        size = os.path.getsize(file_path)
+                        st.info(f"    - {file}: {size} bytes")
+                except Exception as e:
+                    st.warning(f"  Error checking files: {e}")
+            else:
+                st.warning(f"  ❌ Vectorstore path does not exist!")
+        
         # Clear vectorstore cache for all restored companies
         for company in extracted_companies:
             clear_company_vectorstore_cache(company)
         
-        # ADDITION: Force session state refresh for all vectorstore-related keys
+        # Force session state refresh for all vectorstore-related keys
         keys_to_remove = [key for key in st.session_state.keys() if key.startswith('vectorstore_')]
         for key in keys_to_remove:
             del st.session_state[key]
@@ -324,18 +388,6 @@ def restore_from_backup(uploaded_file):
         st.info(f"   • Failed extractions: {failed_extractions}")
         st.info(f"   • Companies found: {len(extracted_companies)}")
         
-        # ADDITION: Verify vectorstore paths exist for debugging
-        VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-        st.info(f"📁 Vectorstore locations:")
-        for company in extracted_companies:
-            vs_path = os.path.join(VECTORSTORE_ROOT, company)
-            exists = os.path.exists(vs_path)
-            if exists:
-                file_count = len([f for f in os.listdir(vs_path) if os.path.isfile(os.path.join(vs_path, f))])
-                st.info(f"   • {company}: ✅ ({file_count} files)")
-            else:
-                st.warning(f"   • {company}: ❌ (not found)")
-        
         return True, extracted_companies
         
     except Exception as e:
@@ -346,6 +398,7 @@ def restore_from_backup(uploaded_file):
         except:
             pass
         return False, str(e)
+
 
 # Load environment variables
 load_dotenv()
