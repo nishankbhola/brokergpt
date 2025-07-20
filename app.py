@@ -160,7 +160,101 @@ def call_gemini_with_fallback(payload):
     
     # If all models failed, return the last response
     return response, current_model
-    
+
+# Add this function after the existing utility functions (around line 100)
+def create_full_backup():
+    """Create a complete backup of all companies' data and vectorstores"""
+    try:
+        # Create a temporary zip file in memory
+        zip_buffer = BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Backup PDFs
+            pdf_base_dir = "data/pdfs"
+            if os.path.exists(pdf_base_dir):
+                for root, dirs, files in os.walk(pdf_base_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Create archive path maintaining folder structure
+                        arcname = os.path.relpath(file_path, os.path.dirname(pdf_base_dir))
+                        zip_file.write(file_path, arcname)
+            
+            # Backup logos
+            logos_dir = "data/logos"
+            if os.path.exists(logos_dir):
+                for root, dirs, files in os.walk(logos_dir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, os.path.dirname(logos_dir))
+                        zip_file.write(file_path, arcname)
+            
+            # Backup vectorstores
+            VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+            if os.path.exists(VECTORSTORE_ROOT):
+                for root, dirs, files in os.walk(VECTORSTORE_ROOT):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Create archive path maintaining folder structure
+                        arcname = os.path.join("vectorstores", os.path.relpath(file_path, VECTORSTORE_ROOT))
+                        zip_file.write(file_path, arcname)
+        
+        zip_buffer.seek(0)
+        return zip_buffer.getvalue()
+        
+    except Exception as e:
+        st.error(f"❌ Error creating backup: {str(e)}")
+        return None
+
+def restore_from_backup(uploaded_file):
+    """Restore all data from uploaded backup file"""
+    try:
+        # Create a temporary file to work with
+        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_file_path = tmp_file.name
+        
+        extracted_companies = set()
+        
+        with zipfile.ZipFile(tmp_file_path, 'r') as zip_file:
+            # Extract everything
+            for member in zip_file.namelist():
+                # Skip directories
+                if member.endswith('/'):
+                    continue
+                
+                # Determine extraction path
+                if member.startswith('data/'):
+                    extract_path = member  # Keep data/ structure
+                elif member.startswith('vectorstores/'):
+                    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
+                    extract_path = os.path.join(VECTORSTORE_ROOT, member[12:])  # Remove 'vectorstores/' prefix
+                else:
+                    continue  # Skip unknown files
+                
+                # Create directory if it doesn't exist
+                os.makedirs(os.path.dirname(extract_path), exist_ok=True)
+                
+                # Extract file
+                with zip_file.open(member) as source, open(extract_path, 'wb') as target:
+                    target.write(source.read())
+                
+                # Track companies for cache clearing
+                if member.startswith('data/pdfs/'):
+                    company_name = member.split('/')[2]  # data/pdfs/COMPANY/file.pdf
+                    extracted_companies.add(company_name)
+        
+        # Clear vectorstore cache for all restored companies
+        for company in extracted_companies:
+            clear_company_vectorstore_cache(company)
+        
+        # Clean up temp file
+        os.unlink(tmp_file_path)
+        
+        return True, extracted_companies
+        
+    except Exception as e:
+        return False, str(e)
+
 # Load environment variables
 load_dotenv()
 
@@ -271,33 +365,89 @@ with st.sidebar:
         st.session_state.admin_authenticated = False
 
     if check_admin_password():
-        st.markdown('<div class="success-zone">', unsafe_allow_html=True)
-        st.success("🔓 Admin Mode Active")
-        
-        # Add new company
-        st.markdown("#### ➕ Add New Company")
-        with st.form("add_company_form"):
-            new_company = st.text_input("Company Name:")
-            logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
-            add_submitted = st.form_submit_button("Add Company")
-            
-            if add_submitted and new_company:
-                new_path = os.path.join(company_base_dir, new_company)
-                if not os.path.exists(new_path):
-                    os.makedirs(new_path)
+    st.markdown('<div class="success-zone">', unsafe_allow_html=True)
+    st.success("🔓 Admin Mode Active")
+    
+    # Backup/Restore Section
+    st.markdown("#### 💾 Backup & Restore")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Download Backup
+        if st.button("📥 Create Full Backup", help="Download all PDFs and vectorstores"):
+            with st.spinner("🔄 Creating backup..."):
+                backup_data = create_full_backup()
+                if backup_data:
+                    from datetime import datetime
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"brokergpt_backup_{timestamp}.zip"
                     
-                    # Save logo if uploaded
-                    if logo_file is not None:
-                        logo_path = os.path.join(logos_dir, f"{new_company}.png")
-                        with open(logo_path, "wb") as f:
-                            f.write(logo_file.getbuffer())
-                    
-                    st.success(f"✅ Added company: {new_company}")
-                    st.rerun()
-                else:
-                    st.warning("⚠️ Company already exists")
+                    st.download_button(
+                        label="📥 Download Backup",
+                        data=backup_data,
+                        file_name=filename,
+                        mime="application/zip",
+                        help="Click to download the complete backup file"
+                    )
+                    st.success("✅ Backup created successfully!")
+    
+    with col2:
+        # Upload Restore
+        st.markdown("**Restore from Backup:**")
+        backup_file = st.file_uploader(
+            "Upload backup file:",
+            type=['zip'],
+            help="Upload a previously created backup file",
+            key="backup_uploader"
+        )
         
-        st.markdown('</div>', unsafe_allow_html=True)
+        if backup_file:
+            if st.button("🔄 Restore Backup", type="secondary"):
+                with st.spinner("🔄 Restoring from backup..."):
+                    success, result = restore_from_backup(backup_file)
+                    
+                    if success:
+                        companies = result
+                        st.success(f"✅ Successfully restored {len(companies)} companies!")
+                        st.info(f"Restored companies: {', '.join(companies)}")
+                        
+                        # Clear all session state to force refresh
+                        for key in list(st.session_state.keys()):
+                            if key.startswith('vectorstore_'):
+                                del st.session_state[key]
+                        
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Restore failed: {result}")
+    
+    st.markdown("---")
+    
+    # Add new company (existing code)
+    st.markdown("#### ➕ Add New Company")
+    with st.form("add_company_form"):
+        new_company = st.text_input("Company Name:")
+        logo_file = st.file_uploader("Company Logo (PNG):", type=['png', 'jpg', 'jpeg'])
+        add_submitted = st.form_submit_button("Add Company")
+        
+        if add_submitted and new_company:
+            new_path = os.path.join(company_base_dir, new_company)
+            if not os.path.exists(new_path):
+                os.makedirs(new_path)
+                
+                # Save logo if uploaded
+                if logo_file is not None:
+                    logo_path = os.path.join(logos_dir, f"{new_company}.png")
+                    with open(logo_path, "wb") as f:
+                        f.write(logo_file.getbuffer())
+                
+                st.success(f"✅ Added company: {new_company}")
+                st.rerun()
+            else:
+                st.warning("⚠️ Company already exists")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Company selection
     st.markdown("---")
