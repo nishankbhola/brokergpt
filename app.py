@@ -11,9 +11,6 @@ from PIL import Image
 from dotenv import load_dotenv
 from langchain.vectorstores import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
-import zipfile
-import tempfile
-from io import BytesIO
 
 # --- NEW: Cached function to load the embedding model ---
 @st.cache_resource
@@ -29,49 +26,74 @@ def create_chroma_vectorstore(vectorstore_path, company_name, max_retries=5):
     """Create Chroma vectorstore with enhanced retry logic and company-specific caching"""
     for attempt in range(max_retries):
         try:
+            # Clear any existing chroma client for this company
             vectorstore_key = f'vectorstore_{company_name}'
-            st.session_state.pop(vectorstore_key, None)
+            if vectorstore_key in st.session_state:
+                del st.session_state[vectorstore_key]
+            
             os.makedirs(vectorstore_path, exist_ok=True)
+            
+            # --- MODIFIED: Use the cached function to get the model ---
             embedding_function = load_embedding_model()
+            
             vectorstore = Chroma(
                 persist_directory=vectorstore_path,
                 embedding_function=embedding_function,
                 client_settings=None
             )
+            
             vectorstore._client.heartbeat()
             return vectorstore
+            
         except Exception as e:
             if attempt < max_retries - 1:
-                time.sleep(2 * (attempt + 1))
+                wait_time = 2 * (attempt + 1)
+                time.sleep(wait_time)
+                
+                # More aggressive cleanup on retry
                 if os.path.exists(vectorstore_path):
-                    for file in os.listdir(vectorstore_path):
-                        if file.endswith(('.sqlite3', '.db')):
-                            try:
-                                os.remove(os.path.join(vectorstore_path, file))
-                            except Exception:
-                                pass
+                    try:
+                        for file in os.listdir(vectorstore_path):
+                            if file.endswith('.sqlite3') or file.endswith('.db'):
+                                file_path = os.path.join(vectorstore_path, file)
+                                try:
+                                    os.remove(file_path)
+                                except:
+                                    pass
+                    except:
+                        pass
             else:
-                raise
+                raise e
 
 def get_company_logo(company_name):
     """Get company logo if it exists"""
     logo_path = os.path.join("data/logos", f"{company_name}.png")
-    return Image.open(logo_path) if os.path.exists(logo_path) else None
+    if os.path.exists(logo_path):
+        return Image.open(logo_path)
+    return None
 
 def display_company_with_logo(company_name, size=50):
     """Display company name with logo if available"""
     logo = get_company_logo(company_name)
     if logo:
-        st.image(logo, width=size)
-    st.markdown(f"🏢 **{company_name}**")
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.image(logo, width=size)
+    else:
+        st.markdown(f"🏢 **{company_name}**")
 
 def check_admin_password():
     """Check if admin password is correct"""
-    if not st.session_state.get('admin_authenticated', False):
+    if 'admin_authenticated' not in st.session_state:
+        st.session_state.admin_authenticated = False
+    
+    if not st.session_state.admin_authenticated:
         with st.form("admin_login"):
             st.subheader("🔐 Admin Access Required")
             password = st.text_input("Enter admin password:", type="password")
-            if st.form_submit_button("Login"):
+            submitted = st.form_submit_button("Login")
+            
+            if submitted:
                 if password == "classmate":
                     st.session_state.admin_authenticated = True
                     st.success("✅ Admin access granted!")
@@ -84,19 +106,25 @@ def check_admin_password():
 
 def clear_company_vectorstore_cache(company_name):
     """Clear vectorstore cache for a specific company"""
-    st.session_state.pop(f'vectorstore_{company_name}', None)
+    vectorstore_key = f'vectorstore_{company_name}'
+    if vectorstore_key in st.session_state:
+        del st.session_state[vectorstore_key]
 
 def get_company_vectorstore(company_name, vectorstore_path):
     """Get or create company-specific vectorstore with proper caching"""
     vectorstore_key = f'vectorstore_{company_name}'
+    
     if vectorstore_key not in st.session_state:
         st.session_state[vectorstore_key] = create_chroma_vectorstore(vectorstore_path, company_name)
+    
     return st.session_state[vectorstore_key]
 
 def get_uploaded_pdfs(company_name):
     """Get list of uploaded PDFs for a company"""
     company_pdf_dir = os.path.join("data/pdfs", company_name)
-    return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")] if os.path.exists(company_pdf_dir) else []
+    if os.path.exists(company_pdf_dir):
+        return [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
+    return []
 
 def call_gemini_with_fallback(payload):
     """Call Gemini API with automatic model fallback on rate limit"""
@@ -106,170 +134,30 @@ def call_gemini_with_fallback(payload):
     for attempt in range(len(GEMINI_MODELS)):
         current_model = GEMINI_MODELS[st.session_state.current_model_index]
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
+        
         try:
             time.sleep(1)
             response = requests.post(url, headers=headers, data=json.dumps(payload))
+            
             if response.status_code == 200:
                 return response, current_model
-            if response.status_code == 429:
+            elif response.status_code == 429:
                 st.warning(f"⚠️ Rate limit reached for {current_model}, trying next model...")
+                # Switch to next model
                 st.session_state.current_model_index = (st.session_state.current_model_index + 1) % len(GEMINI_MODELS)
-                time.sleep(2)
+                time.sleep(2)  # Wait before trying next model
                 continue
-            return response, current_model
+            else:
+                return response, current_model
+                
         except Exception as e:
             st.error(f"❌ Error with {current_model}: {str(e)}")
             st.session_state.current_model_index = (st.session_state.current_model_index + 1) % len(GEMINI_MODELS)
+            continue
+    
+    # If all models failed, return the last response
     return response, current_model
-
-# Add this function after the existing utility functions (around line 100)
-def create_full_backup():
-    """Create a complete backup of all companies' data and vectorstores"""
-    try:
-        # Create a temporary zip file in memory
-        zip_buffer = BytesIO()
-        
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Backup PDFs
-            pdf_base_dir = "data/pdfs"
-            if os.path.exists(pdf_base_dir):
-                for root, dirs, files in os.walk(pdf_base_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        # Create archive path maintaining folder structure
-                        arcname = os.path.relpath(file_path, os.path.dirname(pdf_base_dir))
-                        zip_file.write(file_path, arcname)
-            
-            # Backup logos
-            logos_dir = "data/logos"
-            if os.path.exists(logos_dir):
-                for root, dirs, files in os.walk(logos_dir):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, os.path.dirname(logos_dir))
-                        zip_file.write(file_path, arcname)
-            
-            # Backup vectorstores
-            VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-            if os.path.exists(VECTORSTORE_ROOT):
-                for root, dirs, files in os.walk(VECTORSTORE_ROOT):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        # Create archive path maintaining folder structure
-                        arcname = os.path.join("vectorstores", os.path.relpath(file_path, VECTORSTORE_ROOT))
-                        zip_file.write(file_path, arcname)
-        
-        zip_buffer.seek(0)
-        return zip_buffer.getvalue()
-        
-    except Exception as e:
-        st.error(f"❌ Error creating backup: {str(e)}")
-        return None
-
-def restore_from_backup(uploaded_file):
-    """Restore all data from uploaded backup file"""
-    try:
-        # Create a temporary file to work with
-        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_file_path = tmp_file.name
-        
-        extracted_companies = set()
-        successful_extractions = 0
-        failed_extractions = 0
-        
-        with zipfile.ZipFile(tmp_file_path, 'r') as zip_file:
-            # Debug: Print all files in the zip
-            st.info(f"📦 Zip file contains {len(zip_file.namelist())} files")
-            
-            # First pass: identify all companies in the backup
-            for member in zip_file.namelist():
-                if member.startswith('data/pdfs/') and not member.endswith('/'):
-                    parts = member.split('/')
-                    if len(parts) >= 3:  # data/pdfs/COMPANY/...
-                        company_name = parts[2]
-                        extracted_companies.add(company_name)
-            
-            st.info(f"🏢 Found companies in backup: {', '.join(extracted_companies) if extracted_companies else 'None'}")
-            
-            # Extract everything
-            for member in zip_file.namelist():
-                # Skip directories
-                if member.endswith('/'):
-                    continue
-                
-                # Determine extraction path
-                extract_path = None
-                
-                if member.startswith('data/'):
-                    # For data files, use relative path from current directory
-                    extract_path = member  # Keep data/ structure
-                elif member.startswith('vectorstores/'):
-                    # For vectorstores, use the proper base directory
-                    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-                    # Remove 'vectorstores/' prefix and join with base path
-                    relative_path = member[12:]  # Remove 'vectorstores/' prefix
-                    extract_path = os.path.join(VECTORSTORE_ROOT, relative_path)
-                else:
-                    st.warning(f"⚠️ Skipping unknown file: {member}")
-                    continue
-                
-                if extract_path is None:
-                    continue
-                
-                # Ensure we don't have problematic absolute paths
-                if os.path.isabs(extract_path) and not extract_path.startswith(('/mount/tmp', '/tmp')):
-                    # If it's an absolute path but not in allowed directories, make it relative
-                    extract_path = extract_path.lstrip('/')
-                    extract_path = os.path.join('.', extract_path)
-                
-                # Create directory if it doesn't exist
-                extract_dir = os.path.dirname(extract_path)
-                if extract_dir:  # Only create if there's actually a directory path
-                    os.makedirs(extract_dir, exist_ok=True)
-                
-                # Extract file
-                try:
-                    with zip_file.open(member) as source, open(extract_path, 'wb') as target:
-                        target.write(source.read())
-                    successful_extractions += 1
-                    
-                    # Track companies for cache clearing (additional check)
-                    if member.startswith('data/pdfs/'):
-                        parts = member.split('/')
-                        if len(parts) >= 3:  # data/pdfs/COMPANY/...
-                            company_name = parts[2]
-                            extracted_companies.add(company_name)
-                            
-                except Exception as file_error:
-                    st.warning(f"⚠️ Could not extract {member}: {file_error}")
-                    failed_extractions += 1
-                    continue
-        
-        # Clear vectorstore cache for all restored companies
-        for company in extracted_companies:
-            clear_company_vectorstore_cache(company)
-        
-        # Clean up temp file
-        os.unlink(tmp_file_path)
-        
-        # Enhanced success reporting
-        st.info(f"📊 Extraction Summary:")
-        st.info(f"   • Successful extractions: {successful_extractions}")
-        st.info(f"   • Failed extractions: {failed_extractions}")
-        st.info(f"   • Companies found: {len(extracted_companies)}")
-        
-        return True, extracted_companies
-        
-    except Exception as e:
-        # Clean up temp file in case of error
-        try:
-            if 'tmp_file_path' in locals():
-                os.unlink(tmp_file_path)
-        except:
-            pass
-        return False, str(e)
-
+    
 # Load environment variables
 load_dotenv()
 
@@ -383,63 +271,7 @@ with st.sidebar:
         st.markdown('<div class="success-zone">', unsafe_allow_html=True)
         st.success("🔓 Admin Mode Active")
         
-        # Backup/Restore Section
-        st.markdown("#### 💾 Backup & Restore")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Download Backup
-            if st.button("📥 Create Full Backup", help="Download all PDFs and vectorstores"):
-                with st.spinner("🔄 Creating backup..."):
-                    backup_data = create_full_backup()
-                    if backup_data:
-                        from datetime import datetime
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"brokergpt_backup_{timestamp}.zip"
-                        
-                        st.download_button(
-                            label="📥 Download Backup",
-                            data=backup_data,
-                            file_name=filename,
-                            mime="application/zip",
-                            help="Click to download the complete backup file"
-                        )
-                        st.success("✅ Backup created successfully!")
-        
-        with col2:
-            # Upload Restore
-            st.markdown("**Restore from Backup:**")
-            backup_file = st.file_uploader(
-                "Upload backup file:",
-                type=['zip'],
-                help="Upload a previously created backup file",
-                key="backup_uploader"
-            )
-            
-            if backup_file:
-                if st.button("🔄 Restore Backup", type="secondary"):
-                    with st.spinner("🔄 Restoring from backup..."):
-                        success, result = restore_from_backup(backup_file)
-                        
-                        if success:
-                            companies = result
-                            st.success(f"✅ Successfully restored {len(companies)} companies!")
-                            st.info(f"Restored companies: {', '.join(companies)}")
-                            
-                            # Clear all session state to force refresh
-                            for key in list(st.session_state.keys()):
-                                if key.startswith('vectorstore_'):
-                                    del st.session_state[key]
-                            
-                            time.sleep(2)
-                            st.rerun()
-                        else:
-                            st.error(f"❌ Restore failed: {result}")
-        
-        st.markdown("---")
-        
-        # Add new company (existing code)
+        # Add new company
         st.markdown("#### ➕ Add New Company")
         with st.form("add_company_form"):
             new_company = st.text_input("Company Name:")
@@ -799,7 +631,7 @@ elif st.session_state.selected_company:
         else:  # Ask Questions view
             st.markdown("---")
             display_company_with_logo(selected_company, size=150)
-            st.subheader(f"💬 Ask {selected_company} Questions")
+            st.subheader(f"💬 Ask {selected_company} Questions") 
             
             query = st.text_input("🔍 Enter your question:", placeholder="Ask me anything about underwriting...")
             
@@ -866,27 +698,44 @@ Please provide a clear, professional response that would be helpful for insuranc
                                                             data=f,
                                                             file_name=os.path.basename(source_file),
                                                             mime="application/pdf",
-                                                            key=f"dl_{selected_company}_{i}"
+                                                            key=f"download_{selected_company}_{i}"
                                                         )
+                                            st.markdown("---")
+                                            
                             except Exception as e:
-                                error_msg = str(e)
-                                st.error(f"❌ {'Database error detected.' if 'no such table: tenants' in error_msg else error_msg}")
-                                clear_company_vectorstore_cache(selected_company)
-                                st.info("💡 Use admin access to rebuild the knowledge base.")
+                                st.error("❌ Error parsing response from Gemini")
+                        else:
+                            st.error(f"❌ Gemini API Error: {response.status_code}")
+                            
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "no such table: tenants" in error_msg:
+                            st.error("❌ Database error detected. Please use admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
+                            clear_company_vectorstore_cache(selected_company)
+                        else:
+                            st.error(f"❌ Error accessing knowledge base: {error_msg}")
+                            st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
+                            clear_company_vectorstore_cache(selected_company)
+    
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔍 Ask Questions", key="nav_questions"):
+            st.session_state.current_view = "Ask Questions"
+    
+    with col2:
+        if st.button("📊 Dashboard", key="nav_dashboard"):
+            st.session_state.current_view = "Dashboard"
 
-# Navigation
-if st.session_state.selected_company:
-    _, c1, c2, _ = st.columns([1, 2, 2, 1])
-    if c1.button("🔍 Questions", key="nav_q"): 
-        st.session_state.current_view = "Ask Questions"
-    if c2.button("📊 Dashboard", key="nav_d"): 
-        st.session_state.current_view = "Dashboard"
 else:
     st.info("👆 Please select a company from the sidebar to continue.")
 
 # Footer
+st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | AI-Powered | v16.0.5"
+    "🤖 Broker-GPT | Powered by AI | Version 16.0.5 | 2025"
     "</div>", 
-    unsafe_allow_html=True)
+    unsafe_allow_html=True
+)
