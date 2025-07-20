@@ -205,9 +205,6 @@ def create_full_backup():
         st.error(f"❌ Error creating backup: {str(e)}")
         return None
 
-
-# Replace your restore_from_backup function with this enhanced debug version:
-
 def restore_from_backup(uploaded_file):
     """Restore all data from uploaded backup file"""
     try:
@@ -220,56 +217,19 @@ def restore_from_backup(uploaded_file):
         successful_extractions = 0
         failed_extractions = 0
         
-        # ENHANCED DEBUG: Show what paths will be used
-        VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-        st.info(f"🔍 DEBUGGING PATHS:")
-        st.info(f"   • Vectorstore root will be: {VECTORSTORE_ROOT}")
-        st.info(f"   • PDF root will be: data/pdfs/")
-        st.info(f"   • Logos root will be: data/logos/")
-        
         with zipfile.ZipFile(tmp_file_path, 'r') as zip_file:
-            # Enhanced Debug: Print all files in the zip
+            # Debug: Print all files in the zip
             st.info(f"📦 Zip file contains {len(zip_file.namelist())} files")
-            
-            # Show first 10 files for debugging
-            st.info("🔍 First 10 files in zip:")
-            for i, member in enumerate(zip_file.namelist()[:10]):
-                st.info(f"   {i+1}. {member}")
             
             # First pass: identify all companies in the backup
             for member in zip_file.namelist():
-                # Handle both old format (data/pdfs/) and new format (pdfs/)
-                if ((member.startswith('data/pdfs/') or member.startswith('pdfs/')) and 
-                    not member.endswith('/')):
+                if member.startswith('data/pdfs/') and not member.endswith('/'):
                     parts = member.split('/')
-                    # For data/pdfs/COMPANY/... format
-                    if member.startswith('data/pdfs/') and len(parts) >= 3:
+                    if len(parts) >= 3:  # data/pdfs/COMPANY/...
                         company_name = parts[2]
-                        extracted_companies.add(company_name)
-                    # For pdfs/COMPANY/... format
-                    elif member.startswith('pdfs/') and len(parts) >= 2:
-                        company_name = parts[1]
                         extracted_companies.add(company_name)
             
             st.info(f"🏢 Found companies in backup: {', '.join(extracted_companies) if extracted_companies else 'None'}")
-            
-            # ENHANCED DEBUG: Track vectorstore files specifically
-            vectorstore_files_found = {}
-            for member in zip_file.namelist():
-                if member.startswith('vectorstores/'):
-                    parts = member.split('/')
-                    if len(parts) >= 2:
-                        company_name = parts[1]
-                        if company_name not in vectorstore_files_found:
-                            vectorstore_files_found[company_name] = []
-                        vectorstore_files_found[company_name].append(member)
-            
-            st.info(f"🗃️ Vectorstore files found for companies:")
-            for company, files in vectorstore_files_found.items():
-                st.info(f"   • {company}: {len(files)} files")
-                # Show first few files
-                for file in files[:3]:
-                    st.info(f"     - {file}")
             
             # Extract everything
             for member in zip_file.namelist():
@@ -283,22 +243,12 @@ def restore_from_backup(uploaded_file):
                 if member.startswith('data/'):
                     # For data files, use relative path from current directory
                     extract_path = member  # Keep data/ structure
-                elif member.startswith('pdfs/'):
-                    # Handle the pdfs/ format by converting to data/pdfs/
-                    relative_path = member[5:]  # Remove 'pdfs/' prefix
-                    extract_path = os.path.join("data", "pdfs", relative_path)
-                elif member.startswith('logos/'):
-                    # Handle logos/ format by converting to data/logos/
-                    relative_path = member[6:]  # Remove 'logos/' prefix
-                    extract_path = os.path.join("data", "logos", relative_path)
                 elif member.startswith('vectorstores/'):
                     # For vectorstores, use the proper base directory
+                    VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
                     # Remove 'vectorstores/' prefix and join with base path
                     relative_path = member[12:]  # Remove 'vectorstores/' prefix
                     extract_path = os.path.join(VECTORSTORE_ROOT, relative_path)
-                    
-                    # ENHANCED DEBUG: Show exactly where vectorstore files will go
-                    st.info(f"🗃️ Vectorstore file: {member} → {extract_path}")
                 else:
                     st.warning(f"⚠️ Skipping unknown file: {member}")
                     continue
@@ -323,21 +273,11 @@ def restore_from_backup(uploaded_file):
                         target.write(source.read())
                     successful_extractions += 1
                     
-                    # ENHANCED DEBUG: Confirm vectorstore files were written
-                    if member.startswith('vectorstores/'):
-                        file_size = os.path.getsize(extract_path)
-                        st.info(f"✅ Wrote vectorstore file: {extract_path} ({file_size} bytes)")
-                    
-                    # Track companies for cache clearing (additional check for both formats)
+                    # Track companies for cache clearing (additional check)
                     if member.startswith('data/pdfs/'):
                         parts = member.split('/')
                         if len(parts) >= 3:  # data/pdfs/COMPANY/...
                             company_name = parts[2]
-                            extracted_companies.add(company_name)
-                    elif member.startswith('pdfs/'):
-                        parts = member.split('/')
-                        if len(parts) >= 2:  # pdfs/COMPANY/...
-                            company_name = parts[1]
                             extracted_companies.add(company_name)
                             
                 except Exception as file_error:
@@ -345,39 +285,9 @@ def restore_from_backup(uploaded_file):
                     failed_extractions += 1
                     continue
         
-        # ENHANCED DEBUG: Verify what was actually restored
-        st.info(f"🔍 POST-RESTORE VERIFICATION:")
-        for company in extracted_companies:
-            vs_path = os.path.join(VECTORSTORE_ROOT, company)
-            st.info(f"Company: {company}")
-            st.info(f"  Vectorstore path: {vs_path}")
-            st.info(f"  Path exists: {os.path.exists(vs_path)}")
-            
-            if os.path.exists(vs_path):
-                try:
-                    files = os.listdir(vs_path)
-                    st.info(f"  Files found: {files}")
-                    db_files = [f for f in files if f.endswith(('.sqlite3', '.db', '.parquet'))]
-                    st.info(f"  Database files: {db_files}")
-                    
-                    # Check file sizes
-                    for file in files:
-                        file_path = os.path.join(vs_path, file)
-                        size = os.path.getsize(file_path)
-                        st.info(f"    - {file}: {size} bytes")
-                except Exception as e:
-                    st.warning(f"  Error checking files: {e}")
-            else:
-                st.warning(f"  ❌ Vectorstore path does not exist!")
-        
         # Clear vectorstore cache for all restored companies
         for company in extracted_companies:
             clear_company_vectorstore_cache(company)
-        
-        # Force session state refresh for all vectorstore-related keys
-        keys_to_remove = [key for key in st.session_state.keys() if key.startswith('vectorstore_')]
-        for key in keys_to_remove:
-            del st.session_state[key]
         
         # Clean up temp file
         os.unlink(tmp_file_path)
@@ -398,7 +308,6 @@ def restore_from_backup(uploaded_file):
         except:
             pass
         return False, str(e)
-
 
 # Load environment variables
 load_dotenv()
@@ -734,22 +643,7 @@ with st.sidebar:
             # Delete company data
             st.markdown('<div class="danger-zone">', unsafe_allow_html=True)
             st.markdown("#### 🗑️ Danger Zone")
-            # Debug vectorstore status
-            if st.button("🔍 Debug Vectorstore Status"):
-                VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
-                st.info(f"Vectorstore root: {VECTORSTORE_ROOT}")
-                
-                for company in company_folders:
-                    vs_path = os.path.join(VECTORSTORE_ROOT, company)
-                    st.info(f"Company: {company}")
-                    st.info(f"  Path: {vs_path}")
-                    st.info(f"  Exists: {os.path.exists(vs_path)}")
-                    if os.path.exists(vs_path):
-                        files = os.listdir(vs_path)
-                        st.info(f"  Files: {files}")
-                        # Check for database files specifically
-                        db_files = [f for f in files if f.endswith(('.sqlite3', '.db', '.parquet'))]
-                        st.info(f"  Database files: {db_files}")
+            
             if st.button("🗑️ Delete All Company Data", type="secondary"):
                 if st.button("⚠️ CONFIRM DELETE", key="confirm_delete"):
                     try:
@@ -899,43 +793,8 @@ elif st.session_state.selected_company:
     VECTORSTORE_ROOT = "/mount/tmp/vectorstores" if is_streamlit_cloud() else "vectorstores"
     vectorstore_path = os.path.join(VECTORSTORE_ROOT, selected_company)
     
-    # Check if vectorstore exists and has actual data
-    vectorstore_exists = False
-    if os.path.exists(vectorstore_path):
-        try:
-            # Check if the directory has any files (not just empty directory)
-            files_in_vectorstore = []
-            for root, dirs, files in os.walk(vectorstore_path):
-                files_in_vectorstore.extend(files)
-            
-            # Consider vectorstore valid if it has files, especially database files
-            if files_in_vectorstore:
-                # Check for specific vectorstore files that indicate a valid Chroma database
-                db_files = [f for f in files_in_vectorstore if f.endswith(('.sqlite3', '.db', '.parquet'))]
-                if db_files:
-                    vectorstore_exists = True
-                    # Also try to initialize the vectorstore to make sure it's accessible
-                    try:
-                        test_vectorstore = get_company_vectorstore(selected_company, vectorstore_path)
-                        # Try a simple operation to verify it works
-                        test_vectorstore._client.heartbeat()
-                        vectorstore_exists = True
-                    except Exception as test_error:
-                        st.warning(f"⚠️ Vectorstore files found but not accessible: {str(test_error)}")
-                        vectorstore_exists = False
-                else:
-                    st.warning(f"⚠️ Vectorstore directory exists but no database files found for {selected_company}.")
-            else:
-                st.warning(f"⚠️ Empty vectorstore found for {selected_company}. Please use 'Relearn PDFs'.")
-        except Exception as e:
-            st.warning(f"⚠️ Error checking vectorstore for {selected_company}: {str(e)}")
-            vectorstore_exists = False
-    else:
-        # Vectorstore directory doesn't exist at all
-        vectorstore_exists = False
-    
-    if not vectorstore_exists:
-        st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.")
+    if not os.path.exists(vectorstore_path):
+        st.info(f"📚 Upload PDFs for **{selected_company}** and use admin access to click 'Relearn PDFs' to start.") 
     else:
         if st.session_state.current_view == "Dashboard":
             st.markdown("---")
