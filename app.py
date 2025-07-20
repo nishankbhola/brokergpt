@@ -195,7 +195,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        color: white;
+        color: black;
         text-align: center;
     }
     .company-card {
@@ -304,7 +304,7 @@ with st.sidebar:
                       if os.path.isdir(os.path.join(company_base_dir, f))]
     
     if not company_folders:
-        st.warning("⚠️ No companies found. Add one to begin.")
+        st.warning("⚠️ Broker-gpt under maintenance")
         st.stop()
     
     # Display companies with logos
