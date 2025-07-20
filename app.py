@@ -214,15 +214,32 @@ def restore_from_backup(uploaded_file):
             tmp_file_path = tmp_file.name
         
         extracted_companies = set()
+        successful_extractions = 0
+        failed_extractions = 0
         
         with zipfile.ZipFile(tmp_file_path, 'r') as zip_file:
+            # Debug: Print all files in the zip
+            st.info(f"📦 Zip file contains {len(zip_file.namelist())} files")
+            
+            # First pass: identify all companies in the backup
+            for member in zip_file.namelist():
+                if member.startswith('data/pdfs/') and not member.endswith('/'):
+                    parts = member.split('/')
+                    if len(parts) >= 3:  # data/pdfs/COMPANY/...
+                        company_name = parts[2]
+                        extracted_companies.add(company_name)
+            
+            st.info(f"🏢 Found companies in backup: {', '.join(extracted_companies) if extracted_companies else 'None'}")
+            
             # Extract everything
             for member in zip_file.namelist():
                 # Skip directories
                 if member.endswith('/'):
                     continue
                 
-                # Determine extraction path - FIXED: Handle absolute paths properly
+                # Determine extraction path
+                extract_path = None
+                
                 if member.startswith('data/'):
                     # For data files, use relative path from current directory
                     extract_path = member  # Keep data/ structure
@@ -233,10 +250,13 @@ def restore_from_backup(uploaded_file):
                     relative_path = member[12:]  # Remove 'vectorstores/' prefix
                     extract_path = os.path.join(VECTORSTORE_ROOT, relative_path)
                 else:
-                    continue  # Skip unknown files
+                    st.warning(f"⚠️ Skipping unknown file: {member}")
+                    continue
                 
-                # FIXED: Ensure extract_path is always relative or properly constructed
-                # Convert absolute paths to relative if they somehow got through
+                if extract_path is None:
+                    continue
+                
+                # Ensure we don't have problematic absolute paths
                 if os.path.isabs(extract_path) and not extract_path.startswith(('/mount/tmp', '/tmp')):
                     # If it's an absolute path but not in allowed directories, make it relative
                     extract_path = extract_path.lstrip('/')
@@ -251,8 +271,9 @@ def restore_from_backup(uploaded_file):
                 try:
                     with zip_file.open(member) as source, open(extract_path, 'wb') as target:
                         target.write(source.read())
+                    successful_extractions += 1
                     
-                    # Track companies for cache clearing
+                    # Track companies for cache clearing (additional check)
                     if member.startswith('data/pdfs/'):
                         parts = member.split('/')
                         if len(parts) >= 3:  # data/pdfs/COMPANY/...
@@ -261,6 +282,7 @@ def restore_from_backup(uploaded_file):
                             
                 except Exception as file_error:
                     st.warning(f"⚠️ Could not extract {member}: {file_error}")
+                    failed_extractions += 1
                     continue
         
         # Clear vectorstore cache for all restored companies
@@ -269,6 +291,12 @@ def restore_from_backup(uploaded_file):
         
         # Clean up temp file
         os.unlink(tmp_file_path)
+        
+        # Enhanced success reporting
+        st.info(f"📊 Extraction Summary:")
+        st.info(f"   • Successful extractions: {successful_extractions}")
+        st.info(f"   • Failed extractions: {failed_extractions}")
+        st.info(f"   • Companies found: {len(extracted_companies)}")
         
         return True, extracted_companies
         
