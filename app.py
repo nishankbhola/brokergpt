@@ -642,7 +642,7 @@ Question: {general_query}
 
 Context from {company}: {context}
 
-Please provide a clear, professional response that would be helpful for insurance brokers and their clients. Base your answer ONLY on the provided context from {company}.
+Please provide a clear, professional response in less than 20 words that would be helpful for insurance brokers and their clients. Base your answer ONLY on the provided context from {company}.
 """
                                 }]
                             }]
