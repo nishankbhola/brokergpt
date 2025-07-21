@@ -258,6 +258,11 @@ logos_dir = "data/logos"
 os.makedirs(company_base_dir, exist_ok=True)
 os.makedirs(logos_dir, exist_ok=True)
 
+# Add a radio button for view selection (Ask Questions or General Chat)
+view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat", "Resources"))
+st.session_state.current_view = view_option
+
+
 # Sidebar for company management
 with st.sidebar:
     st.header("🏢 Company Management")
@@ -482,9 +487,7 @@ with st.sidebar:
 
 # Main content area
 
-# Add a radio button for view selection (Ask Questions or General Chat)
-view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat", "Resources"))
-st.session_state.current_view = view_option
+
 
 
 
