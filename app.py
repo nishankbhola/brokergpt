@@ -572,7 +572,7 @@ with st.sidebar:
 # Main content area
 
 # Tab navigation at the top
-st.markdown("### 📋 Navigation")
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
