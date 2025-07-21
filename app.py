@@ -178,7 +178,7 @@ if 'current_model_index' not in st.session_state:
 if 'selected_company' not in st.session_state:
     st.session_state.selected_company = None
 if 'current_view' not in st.session_state:
-    st.session_state.current_view = "Ask Questions"
+    st.session_state.current_view = "General Chat"
 if 'upload_success_message' not in st.session_state:
     st.session_state.upload_success_message = None
 if 'processed_files' not in st.session_state:
@@ -241,6 +241,16 @@ st.markdown("""
         border-radius: 10px;
         padding: 1rem;
         margin: 1rem 0;
+
+    .tab-button {
+        border-radius: 10px !important;
+        margin: 0 5px;
+        transition: all 0.3s ease;
+    }
+    .tab-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -257,10 +267,6 @@ company_base_dir = "data/pdfs"
 logos_dir = "data/logos"
 os.makedirs(company_base_dir, exist_ok=True)
 os.makedirs(logos_dir, exist_ok=True)
-
-# Add a radio button for view selection (Ask Questions or General Chat)
-view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat", "Resources"))
-st.session_state.current_view = view_option
 
 
 # Sidebar for company management
@@ -486,6 +492,30 @@ with st.sidebar:
             st.markdown('</div>', unsafe_allow_html=True)
 
 # Main content area
+
+# Tab navigation at the top
+st.markdown("### 📋 Navigation")
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    if st.button("💬 General Chat", key="tab_general", use_container_width=True, 
+                type="primary" if st.session_state.current_view == "General Chat" else "secondary"):
+        st.session_state.current_view = "General Chat"
+        st.rerun()
+
+with col2:
+    if st.button("🔍 Ask Questions", key="tab_questions", use_container_width=True,
+                type="primary" if st.session_state.current_view == "Ask Questions" else "secondary"):
+        st.session_state.current_view = "Ask Questions" 
+        st.rerun()
+
+with col3:
+    if st.button("📚 Resources", key="tab_resources", use_container_width=True,
+                type="primary" if st.session_state.current_view == "Resources" else "secondary"):
+        st.session_state.current_view = "Resources"
+        st.rerun()
+
+st.markdown("---")
 
 
 
@@ -821,20 +851,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                             st.info("💡 Try using admin access to click 'Relearn PDFs' to rebuild the knowledge base.")
                             clear_company_vectorstore_cache(selected_company)
     
-    st.markdown("---")
-    col1, col2 = st.columns(2)
     
-    with col1:
-        if st.button("🔍 Ask Questions", key="nav_questions"):
-            st.session_state.current_view = "Ask Questions"
-    
-    with col2:
-        if st.button("📊 Dashboard", key="nav_dashboard"):
-            st.session_state.current_view = "Dashboard"
-            
-    with col3:
-        if st.button("📚 Resources", key="nav_resources"):
-            st.session_state.current_view = "Resources"
 
 
         
