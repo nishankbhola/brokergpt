@@ -477,7 +477,7 @@ with st.sidebar:
 # Main content area
 
 # Add a radio button for view selection (Ask Questions or General Chat)
-view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat"))
+view_option = st.sidebar.radio("Select View", ("Ask Questions", "General Chat", "Resources"))
 st.session_state.current_view = view_option
 
 
@@ -578,7 +578,102 @@ Please provide a clear, professional response that would be helpful for insuranc
                 else:
                     st.warning(f"⚠️ Knowledge base not found for {company}.")
                 st.markdown("---")
-
+elif st.session_state.current_view == "Resources":
+    st.markdown("---")
+    st.subheader("📚 Resources - All Company PDFs")
+    
+    company_base_dir = "data/pdfs"
+    company_folders = [f for f in os.listdir(company_base_dir) 
+                      if os.path.isdir(os.path.join(company_base_dir, f))]
+    
+    if not company_folders:
+        st.warning("⚠️ No companies found with uploaded PDFs.")
+    else:
+        # Create tabs or expandable sections for each company
+        for company in company_folders:
+            with st.expander(f"🏢 {company}", expanded=False):
+                company_pdf_dir = os.path.join(company_base_dir, company)
+                pdf_files = [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
+                
+                if pdf_files:
+                    st.info(f"Found {len(pdf_files)} PDF(s) for {company}")
+                    
+                    # Display company logo if available
+                    logo = get_company_logo(company)
+                    if logo:
+                        col1, col2 = st.columns([1, 4])
+                        with col1:
+                            st.image(logo, width=80)
+                    
+                    # Create columns for better layout
+                    cols = st.columns(2)
+                    
+                    for i, pdf_file in enumerate(pdf_files):
+                        with cols[i % 2]:  # Alternate between columns
+                            pdf_path = os.path.join(company_pdf_dir, pdf_file)
+                            
+                            # Create a container for each PDF
+                            with st.container():
+                                st.markdown(f"**📄 {pdf_file}**")
+                                
+                                # Get file size
+                                try:
+                                    file_size = os.path.getsize(pdf_path)
+                                    size_mb = round(file_size / (1024 * 1024), 2)
+                                    st.caption(f"Size: {size_mb} MB")
+                                except:
+                                    st.caption("Size: Unknown")
+                                
+                                # Download button
+                                try:
+                                    with open(pdf_path, "rb") as f:
+                                        pdf_data = f.read()
+                                        st.download_button(
+                                            label=f"⬇️ Download {pdf_file}",
+                                            data=pdf_data,
+                                            file_name=pdf_file,
+                                            mime="application/pdf",
+                                            key=f"download_resources_{company}_{pdf_file}",
+                                            use_container_width=True
+                                        )
+                                except Exception as e:
+                                    st.error(f"Error loading {pdf_file}: {str(e)}")
+                                
+                                st.markdown("---")
+                else:
+                    st.info(f"No PDFs found for {company}")
+        
+        # Summary statistics
+        st.markdown("---")
+        st.subheader("📊 Summary")
+        
+        total_pdfs = 0
+        total_size = 0
+        
+        for company in company_folders:
+            company_pdf_dir = os.path.join(company_base_dir, company)
+            pdf_files = [f for f in os.listdir(company_pdf_dir) if f.endswith(".pdf")]
+            total_pdfs += len(pdf_files)
+            
+            for pdf_file in pdf_files:
+                try:
+                    file_size = os.path.getsize(os.path.join(company_pdf_dir, pdf_file))
+                    total_size += file_size
+                except:
+                    pass
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("🏢 Total Companies", len(company_folders))
+        
+        with col2:
+            st.metric("📄 Total PDFs", total_pdfs)
+        
+        with col3:
+            total_size_mb = round(total_size / (1024 * 1024), 2)
+            st.metric("💽 Total Size", f"{total_size_mb} MB")
+            
 elif st.session_state.selected_company:
     selected_company = st.session_state.selected_company
 
@@ -727,7 +822,10 @@ Please provide a clear, professional response that would be helpful for insuranc
     with col2:
         if st.button("📊 Dashboard", key="nav_dashboard"):
             st.session_state.current_view = "Dashboard"
-
+            
+    with col3:
+        if st.button("📚 Resources", key="nav_resources"):
+            st.session_state.current_view = "Resources"
 else:
     st.info("👆 Please select a company from the sidebar to continue.")
 
