@@ -265,7 +265,7 @@ st.session_state.current_view = view_option
 
 # Sidebar for company management
 with st.sidebar:
-    st.header("🏢 Company Management")
+    st.header("Broker-GPT")
     
 
     # Company selection
