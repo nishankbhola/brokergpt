@@ -636,7 +636,7 @@ if st.session_state.current_view == "General Chat":
                         payload = {
                             "contents": [{
                                 "parts": [{
-                                    "text": f"""As a professional insurance broker assistant, answer the following question using ONLY the context provided for {company}.
+                                    "text": f""" In less than 20 words, As a professional insurance broker assistant, answer the following question using ONLY the context provided for {company}.
 
 Question: {general_query}
 
