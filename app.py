@@ -243,14 +243,92 @@ st.markdown("""
         margin: 1rem 0;
 
     .tab-button {
-        border-radius: 10px !important;
-        margin: 0 5px;
-        transition: all 0.3s ease;
+    /* Base styling */
+    padding: 12px 24px;
+    border-radius: 16px;
+    margin: 0 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    position: relative;
+    overflow: hidden;
+    
+    /* Modern gradient background */
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    
+    /* Smooth transitions */
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* Subtle shadow */
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+    .tab-button::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        transition: left 0.5s ease;
     }
+    
     .tab-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
+        /* Lift and glow effect */
+        transform: translateY(-4px) scale(1.02);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        
+        /* Brighter gradient on hover */
+        background: linear-gradient(135deg, #7c8ef7 0%, #8a5cb8 100%);
+    }
+    
+    .tab-button:hover::before {
+        /* Shimmer effect */
+        left: 100%;
+    }
+    
+    .tab-button:active {
+        transform: translateY(-2px) scale(1.01);
+        transition: all 0.1s ease;
+    }
+    
+    /* Active/selected state */
+    .tab-button.active {
+        background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%);
+        box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+    }
+    
+    .tab-button.active:hover {
+        background: linear-gradient(135deg, #ff7979 0%, #ffa368 100%);
+        box-shadow: 0 8px 25px rgba(255, 107, 107, 0.5);
+    }
+    
+    /* Disabled state */
+    .tab-button:disabled {
+        background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+        color: #757575;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Alternative glass morphism style */
+    .tab-button.glass {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #333;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .tab-button.glass:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.3);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
     }
 </style>
 """, unsafe_allow_html=True)
