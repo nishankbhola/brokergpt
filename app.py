@@ -261,6 +261,41 @@ os.makedirs(logos_dir, exist_ok=True)
 # Sidebar for company management
 with st.sidebar:
     st.header("🏢 Company Management")
+    
+
+    # Company selection
+    st.markdown("---")
+    st.markdown("### 📁 Select Company")
+    
+    company_folders = [f for f in os.listdir(company_base_dir) 
+                      if os.path.isdir(os.path.join(company_base_dir, f))]
+    
+    if not company_folders:
+        st.warning("⚠️ Broker-gpt under maintenance")
+        st.stop()
+    
+    # Display companies with logos
+    for company in company_folders:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if st.button(f"📂 {company}", key=f"select_{company}"):
+                # Clear vectorstore cache when switching companies
+                if st.session_state.selected_company and st.session_state.selected_company != company:
+                    clear_company_vectorstore_cache(st.session_state.selected_company)
+                
+                st.session_state.selected_company = company
+                st.session_state.upload_success_message = None
+                st.rerun()
+        
+        with col2:
+            logo = get_company_logo(company)
+            if logo:
+                st.image(logo, width=30)
+
+
+
+
+    
     # Admin section
     st.markdown("### 🔧 Admin Controls")
     if st.button("🔐 Admin Access"):
@@ -294,34 +329,7 @@ with st.sidebar:
                     st.warning("⚠️ Company already exists")
         
         st.markdown('</div>', unsafe_allow_html=True)
-    # Company selection
-    st.markdown("---")
-    st.markdown("### 📁 Select Company")
     
-    company_folders = [f for f in os.listdir(company_base_dir) 
-                      if os.path.isdir(os.path.join(company_base_dir, f))]
-    
-    if not company_folders:
-        st.warning("⚠️ Broker-gpt under maintenance")
-        st.stop()
-    
-    # Display companies with logos
-    for company in company_folders:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            if st.button(f"📂 {company}", key=f"select_{company}"):
-                # Clear vectorstore cache when switching companies
-                if st.session_state.selected_company and st.session_state.selected_company != company:
-                    clear_company_vectorstore_cache(st.session_state.selected_company)
-                
-                st.session_state.selected_company = company
-                st.session_state.upload_success_message = None
-                st.rerun()
-        
-        with col2:
-            logo = get_company_logo(company)
-            if logo:
-                st.image(logo, width=30)
     
     if st.session_state.selected_company:
         
