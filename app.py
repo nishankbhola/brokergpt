@@ -186,7 +186,7 @@ if 'processed_files' not in st.session_state:
 
 # Page configuration
 st.set_page_config(
-    page_title="🤖 Broker-GPT",
+    page_title="🤖 BIBLIO",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -336,7 +336,8 @@ st.markdown("""
 # Header
 st.markdown("""
 <div class="main-header">
-    <h4>🤖 Broker-GPT </h4>
+    <h4>🤖BIBLIO </h4>
+    <h6>Insurance broker assistant </h6>
 </div>
 """, unsafe_allow_html=True)
 
@@ -349,7 +350,7 @@ os.makedirs(logos_dir, exist_ok=True)
 
 # Sidebar for company management
 with st.sidebar:
-    st.header("Broker-GPT")
+    st.header("BIBLIO")
     
 
     # Company selection
@@ -360,7 +361,7 @@ with st.sidebar:
                       if os.path.isdir(os.path.join(company_base_dir, f))]
     
     if not company_folders:
-        st.warning("⚠️ Broker-gpt under maintenance")
+        st.warning("⚠️ BIBLIO under maintenance")
         st.stop()
     
     # Display companies with logos
@@ -848,7 +849,7 @@ elif st.session_state.selected_company:
             query = st.text_input("🔍 Enter your question:", placeholder="Ask me anything about underwriting...")
             
             if query:
-                with st.spinner("🤖 Broker-GPT is analyzing your question..."):
+                with st.spinner("🤖 BIBLIO is analyzing your question..."):
                     try:
                         # Get company-specific vectorstore
                         vectorstore = get_company_vectorstore(selected_company, vectorstore_path)
@@ -884,7 +885,7 @@ Please provide a clear, professional response that would be helpful for insuranc
                         elif response.status_code == 200:
                             try:
                                 answer = response.json()['candidates'][0]['content']['parts'][0]['text']
-                                st.markdown("### 🤖 Broker-GPT Response")
+                                st.markdown("### 🤖 BIBLIO Response")
                                 st.markdown(f"**Company:** {selected_company}")
                                 st.markdown(f"**Question:** {query}")
                                 st.markdown("**Answer:**")
@@ -940,7 +941,7 @@ else:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 Broker-GPT | Powered by AI | Version 20.1.1 | 2025"
+    "🤖 BIBLIO | Powered by AI | Version 20.1.1 | 2025"
     "</div>", 
     unsafe_allow_html=True
 )
