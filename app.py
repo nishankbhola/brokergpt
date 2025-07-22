@@ -671,12 +671,12 @@ Please provide a clear, professional response in less than 20 words that would b
                                                 if os.path.exists(file_path):
                                                     with open(file_path, "rb") as f:
                                                         st.download_button(
-                                                            label=f"Download {os.path.basename(source_file)}",
-                                                            data=f,
-                                                            file_name=os.path.basename(source_file),
-                                                            mime="application/pdf",
-                                                            key=f"download_{company}_{i}"
-                                                        )
+                                                        label=f"Download {os.path.basename(source_file)}",
+                                                        data=f,
+                                                        file_name=os.path.basename(source_file),
+                                                        mime="application/pdf",
+                                                        key=f"download_general_{company}_{i}_{hash(general_query)}"
+                                                    )
                                             st.markdown("---")
                                             
                             except Exception as e:
@@ -907,12 +907,12 @@ Please provide a clear, professional response that would be helpful for insuranc
                                                 if os.path.exists(file_path):
                                                      with open(file_path, "rb") as f:
                                                         st.download_button(
-                                                            label=f"Download {os.path.basename(source_file)}",
-                                                            data=f,
-                                                            file_name=os.path.basename(source_file),
-                                                            mime="application/pdf",
-                                                            key=f"download_{selected_company}_{i}"
-                                                        )
+                                                        label=f"Download {os.path.basename(source_file)}",
+                                                        data=f,
+                                                        file_name=os.path.basename(source_file),
+                                                        mime="application/pdf",
+                                                        key=f"download_ask_{selected_company}_{i}_{hash(query)}"
+                                                    )
                                             st.markdown("---")
                                             
                             except Exception as e:
