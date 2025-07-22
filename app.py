@@ -136,7 +136,7 @@ def call_gemini_with_fallback(payload):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{current_model}:generateContent?key={GEMINI_API_KEY}"
         
         try:
-            time.sleep(1)
+            time.sleep(0.5)
             response = requests.post(url, headers=headers, data=json.dumps(payload))
             
             if response.status_code == 200:
