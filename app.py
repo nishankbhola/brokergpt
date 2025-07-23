@@ -637,7 +637,7 @@ if st.session_state.current_view == "General Chat":
                         payload = {
                             "contents": [{
                                 "parts": [{
-                                    "text": f""" In less than 20 words, As a professional insurance broker assistant, answer the following question using ONLY the context provided for {company}.
+                                    "text": f""" In less than 100 words, As a professional insurance broker assistant, answer the following question using ONLY the context provided for {company}.
 
 Question: {general_query}
 
@@ -941,7 +941,7 @@ else:
 st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: gray;'>"
-    "🤖 BIBLIO | Powered by AI | Version 22.1.1 | 2025"
+    "🤖 BIBLIO | Powered by AI | Version 23.1.1 | 2025"
     "</div>", 
     unsafe_allow_html=True
 )
